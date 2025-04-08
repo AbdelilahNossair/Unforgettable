@@ -230,7 +230,7 @@ export const Landing: React.FC = () => {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-center">
               <div className="relative h-[300px] sm:h-[400px] rounded-lg overflow-hidden transform hover:scale-105 transition-transform duration-500">
                 <img
-                  src="https://images.unsplash.com/photo-1519671482749-fd09be7ccebf?auto=format&fit=crop&q=80"
+                  src="https://images.unsplash.com/photo-1604017011826-d3b4c23f8914"
                   alt="Moroccan Wedding Security"
                   className="absolute inset-0 w-full h-full object-cover"
                 />
@@ -358,7 +358,7 @@ export const Landing: React.FC = () => {
       <div className="relative border-t border-gray-200 dark:border-white/10">
         <div className="absolute inset-0">
           <img
-            src="https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6a3?auto=format&fit=crop&q=80"
+            src="https://images.unsplash.com/photo-1512632578888-169bbbc64f33"
             alt="Moroccan Celebration Background"
             className="w-full h-full object-cover opacity-10"
           />
