@@ -3,6 +3,8 @@
 import { supabase } from './supabase';
 import { Database } from './supabase-types';
 import { v4 as uuidv4 } from 'uuid';
+import { NotificationService } from '../services/NotificationService';
+import { PhotoCleanupService } from '../services/PhotoCleanupService';
 
 type Tables = Database['public']['Tables'];
 type User = Tables['users']['Row'];
@@ -999,7 +1001,20 @@ export const processPhoto = async (photoId: string): Promise<any> => {
       throw new Error(errorMessage);
     }
 
-    return await response.json();
+    const result = await response.json();
+
+    // Check if event is complete and send notifications if needed
+    if (result.success) {
+      try {
+        // Check if this was the last photo to be processed
+        await NotificationService.checkEventCompletionAndNotify(eventId);
+      } catch (notifyError) {
+        console.error('Error checking completion status:', notifyError);
+        // Don't fail the whole operation if notification fails
+      }
+    }
+
+    return result;
   } catch (error) {
     console.error(`Error processing photo ${photoId}:`, error);
     throw error;

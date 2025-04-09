@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Camera, Search, CalendarDays, Clock, Loader2, Download, Trash2 } from 'lucide-react';
+import { Camera, Search, CalendarDays, Clock, Loader2, Download, Trash2, AlertTriangle } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../store';
 import { toast } from 'sonner';
@@ -19,6 +19,7 @@ type SimplePhoto = {
   url: string;
   created_at: string;
   event_name: string;
+  deletion_scheduled_at?: string; // Add this field for expiration date
   faces: {
     id: string;
     bbox?: {
@@ -29,6 +30,9 @@ type SimplePhoto = {
     };
   }[];
 };
+
+// Expiration time in days
+const PHOTO_EXPIRATION_DAYS = 7;
 
 export const AttendeePhotos: React.FC = () => {
   const { user } = useAuthStore();
@@ -164,6 +168,7 @@ export const AttendeePhotos: React.FC = () => {
           id,
           url,
           created_at,
+          deletion_scheduled_at,
           faces!inner (
             id,
             bbox,
@@ -195,6 +200,7 @@ export const AttendeePhotos: React.FC = () => {
             id: photo.id,
             url: photo.url,
             created_at: photo.created_at,
+            deletion_scheduled_at: photo.deletion_scheduled_at,
             event_name: eventName,
             faces: processedFaces
           });
@@ -209,6 +215,40 @@ export const AttendeePhotos: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Calculate days remaining until deletion
+  const calculateDaysRemaining = (photo: SimplePhoto): number => {
+    let expirationDate: Date;
+    
+    if (photo.deletion_scheduled_at) {
+      // If there's an explicit deletion date, use that
+      expirationDate = new Date(photo.deletion_scheduled_at);
+    } else {
+      // Otherwise calculate based on created_at + PHOTO_EXPIRATION_DAYS
+      expirationDate = new Date(photo.created_at);
+      expirationDate.setDate(expirationDate.getDate() + PHOTO_EXPIRATION_DAYS);
+    }
+    
+    const now = new Date();
+    const timeDiff = expirationDate.getTime() - now.getTime();
+    const daysRemaining = Math.max(0, Math.ceil(timeDiff / (1000 * 60 * 60 * 24)));
+    
+    return daysRemaining;
+  };
+
+  // Get expiration warning class based on days remaining
+  const getExpirationWarningClass = (daysRemaining: number): string => {
+    if (daysRemaining <= 1) return 'bg-red-50 text-red-800 dark:bg-red-900/20 dark:text-red-300'; // Urgent
+    if (daysRemaining <= 3) return 'bg-orange-50 text-orange-800 dark:bg-orange-900/20 dark:text-orange-300'; // Warning
+    return 'bg-yellow-50 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-300'; // Notice
+  };
+
+  // Format expiration message based on days remaining
+  const getExpirationMessage = (daysRemaining: number): string => {
+    if (daysRemaining === 0) return 'Photos expire today!';
+    if (daysRemaining === 1) return 'Photos expire tomorrow!';
+    return `Photos expire in ${daysRemaining} days`;
   };
 
   // Handle photo download
@@ -299,6 +339,12 @@ export const AttendeePhotos: React.FC = () => {
     );
   }
 
+  // Get the lowest days remaining for expiration banner
+  const getLowestDaysRemaining = (): number => {
+    if (!filteredPhotos.length) return 0;
+    return Math.min(...filteredPhotos.map(photo => calculateDaysRemaining(photo)));
+  };
+
   return (
     <div className="py-6">
       <div className="mb-8">
@@ -307,29 +353,49 @@ export const AttendeePhotos: React.FC = () => {
         </h1>
         
         {selectedEvent ? (
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm">
-            <div>
-              <button 
-                onClick={() => setSelectedEvent(null)}
-                className="text-blue-600 dark:text-blue-400 hover:underline mb-2"
-              >
-                ← Back to Events
-              </button>
-              <h2 className="text-lg font-medium text-gray-900 dark:text-white">
-                {events.find(e => e.id === selectedEvent)?.name || 'Event'}
-              </h2>
+          <div className="space-y-4">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm">
+              <div>
+                <button 
+                  onClick={() => setSelectedEvent(null)}
+                  className="text-blue-600 dark:text-blue-400 hover:underline mb-2"
+                >
+                  ← Back to Events
+                </button>
+                <h2 className="text-lg font-medium text-gray-900 dark:text-white">
+                  {events.find(e => e.id === selectedEvent)?.name || 'Event'}
+                </h2>
+              </div>
+
+              <div className="relative w-full sm:w-64">
+                <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search photos..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10 pr-4 py-2 w-full border rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm"
+                />
+              </div>
             </div>
 
-            <div className="relative w-full sm:w-64">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search photos..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 pr-4 py-2 w-full border rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm"
-              />
-            </div>
+            {/* Global expiration warning - only show if there are photos */}
+            {filteredPhotos.length > 0 && (
+              <div className={`rounded-lg p-4 ${getExpirationWarningClass(getLowestDaysRemaining())}`}>
+                <div className="flex items-start">
+                  <AlertTriangle className="h-5 w-5 mr-2 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="font-medium">
+                      {getExpirationMessage(getLowestDaysRemaining())}
+                    </p>
+                    <p className="mt-1 text-sm opacity-90">
+                      These photos will be permanently deleted after the expiration period. 
+                      Please download any photos you want to keep.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <p className="text-gray-600 dark:text-gray-400">
@@ -399,93 +465,111 @@ export const AttendeePhotos: React.FC = () => {
         <>
           {filteredPhotos.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredPhotos.map((photo) => (
-                <div
-                  key={photo.id}
-                  className="bg-white dark:bg-gray-800 rounded-lg shadow-sm hover:shadow-md transition-shadow overflow-hidden relative group"
-                >
-                  <div className="aspect-w-16 aspect-h-9 relative">
-                    <img
-                      src={photo.url}
-                      alt={`Photo from ${photo.event_name}`}
-                      className="w-full h-48 object-cover"
-                      onError={(e) => {
-                        e.currentTarget.src = 'https://images.unsplash.com/photo-1591115765373-5207764f72e7?w=600&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8OHx8ZXZlbnR8ZW58MHx8MHx8fDA%3D';
-                      }}
-                    />
-                    
-                    {/* Highlight faces */}
-                    <div className="absolute inset-0">
-                      {photo.faces && photo.faces.length > 0 && photo.faces.map((face) => (
-                        <div
-                          key={face.id}
-                          className="absolute border-2 border-green-500"
-                          style={{
-                            left: `${face.bbox?.x || 0}%`,
-                            top: `${face.bbox?.y || 0}%`,
-                            width: `${face.bbox?.width || 10}%`,
-                            height: `${face.bbox?.height || 10}%`,
-                          }}
-                        />
-                      ))}
+              {filteredPhotos.map((photo) => {
+                const daysRemaining = calculateDaysRemaining(photo);
+                
+                return (
+                  <div
+                    key={photo.id}
+                    className="bg-white dark:bg-gray-800 rounded-lg shadow-sm hover:shadow-md transition-shadow overflow-hidden relative group"
+                  >
+                    {/* Per-photo expiration tag */}
+                    <div className={`absolute top-2 right-2 z-10 px-2 py-1 rounded-full text-xs flex items-center ${daysRemaining <= 1 ? 'bg-red-500 text-white' : 'bg-yellow-500 text-white'}`}>
+                      <Clock className="h-3 w-3 mr-1" />
+                      {daysRemaining === 0 ? 'Expires today' : daysRemaining === 1 ? 'Expires tomorrow' : `${daysRemaining} days left`}
                     </div>
                     
-                    {/* Hover overlay with action buttons */}
-                    <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-opacity flex items-center justify-center">
-                      <div className="hidden group-hover:flex space-x-2">
-                        {/* View in fullsize */}
-                        <a
-                          href={photo.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="p-2 bg-white text-gray-900 rounded-full hover:bg-gray-100 transition-colors"
-                          title="View full size"
-                        >
-                          <Search className="h-5 w-5" />
-                        </a>
+                    <div className="aspect-w-16 aspect-h-9 relative">
+                      <img
+                        src={photo.url}
+                        alt={`Photo from ${photo.event_name}`}
+                        className="w-full h-48 object-cover"
+                        onError={(e) => {
+                          e.currentTarget.src = 'https://images.unsplash.com/photo-1591115765373-5207764f72e7?w=600&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8OHx8ZXZlbnR8ZW58MHx8MHx8fDA%3D';
+                        }}
+                      />
+                      
+                      {/* Highlight faces */}
+                      <div className="absolute inset-0">
+                        {photo.faces && photo.faces.length > 0 && photo.faces.map((face) => (
+                          <div
+                            key={face.id}
+                            className="absolute border-2 border-green-500"
+                            style={{
+                              left: `${face.bbox?.x || 0}%`,
+                              top: `${face.bbox?.y || 0}%`,
+                              width: `${face.bbox?.width || 10}%`,
+                              height: `${face.bbox?.height || 10}%`,
+                            }}
+                          />
+                        ))}
+                      </div>
+                      
+                      {/* Hover overlay with action buttons */}
+                      <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-opacity flex items-center justify-center">
+                        <div className="hidden group-hover:flex space-x-2">
+                          {/* View in fullsize */}
+                          <a
+                            href={photo.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-2 bg-white text-gray-900 rounded-full hover:bg-gray-100 transition-colors"
+                            title="View full size"
+                          >
+                            <Search className="h-5 w-5" />
+                          </a>
+                          
+                          {/* Download button */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDownload(photo.url, `${photo.event_name}-photo`);
+                            }}
+                            className="p-2 bg-white text-gray-900 rounded-full hover:bg-gray-100 transition-colors"
+                            title="Download photo"
+                          >
+                            <Download className="h-5 w-5" />
+                          </button>
+                          
+                          {/* Delete button */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDelete(photo.id);
+                            }}
+                            disabled={deletingPhoto === photo.id}
+                            className="p-2 bg-white text-red-600 rounded-full hover:bg-gray-100 transition-colors"
+                            title="Remove from your collection"
+                          >
+                            {deletingPhoto === photo.id ? (
+                              <Loader2 className="h-5 w-5 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-5 w-5" />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="p-4">
+                      <div className="flex justify-between items-center">
+                        <div className="flex items-center text-gray-500 dark:text-gray-400">
+                          <CalendarDays className="h-4 w-4 mr-2" />
+                          <span className="text-sm">
+                            {new Date(photo.created_at).toLocaleDateString()}
+                          </span>
+                        </div>
                         
-                        {/* Download button */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDownload(photo.url, `${photo.event_name}-photo`);
-                          }}
-                          className="p-2 bg-white text-gray-900 rounded-full hover:bg-gray-100 transition-colors"
-                          title="Download photo"
-                        >
-                          <Download className="h-5 w-5" />
-                        </button>
-                        
-                        {/* Delete button */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDelete(photo.id);
-                          }}
-                          disabled={deletingPhoto === photo.id}
-                          className="p-2 bg-white text-red-600 rounded-full hover:bg-gray-100 transition-colors"
-                          title="Remove from your collection"
-                        >
-                          {deletingPhoto === photo.id ? (
-                            <Loader2 className="h-5 w-5 animate-spin" />
-                          ) : (
-                            <Trash2 className="h-5 w-5" />
-                          )}
-                        </button>
+                        {/* Mini expiration countdown */}
+                        <div className={`text-xs flex items-center ${daysRemaining <= 1 ? 'text-red-500' : 'text-yellow-500'}`}>
+                          <Clock className="h-3 w-3 mr-1" />
+                          {daysRemaining === 0 ? 'Expires today' : `${daysRemaining}d left`}
+                        </div>
                       </div>
                     </div>
                   </div>
-                  
-                  <div className="p-4">
-                    <div className="flex items-center text-gray-500 dark:text-gray-400">
-                      <CalendarDays className="h-4 w-4 mr-2" />
-                      <span className="text-sm">
-                        {new Date(photo.created_at).toLocaleDateString()}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-8 text-center">

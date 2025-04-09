@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { getPhotoFaces } from '../lib/api';
-import { Loader2, User, Tag } from 'lucide-react';
+import { Loader2, User, Tag, AlertTriangle, Download, Clock } from 'lucide-react';
 
 interface PhotoViewerProps {
   photoId: string;
   photoUrl: string;
   processed: boolean;
+  createdAt: string;
 }
 
 interface Face {
@@ -25,7 +26,12 @@ interface Face {
   } | null;
 }
 
-export const PhotoViewer: React.FC<PhotoViewerProps> = ({ photoId, photoUrl, processed }) => {
+export const PhotoViewer: React.FC<PhotoViewerProps> = ({ 
+  photoId, 
+  photoUrl, 
+  processed,
+  createdAt 
+}) => {
   const [loading, setLoading] = useState(true);
   const [faces, setFaces] = useState<Face[]>([]);
   const [imageLoaded, setImageLoaded] = useState(false);
@@ -62,6 +68,26 @@ export const PhotoViewer: React.FC<PhotoViewerProps> = ({ photoId, photoUrl, pro
     setImageLoaded(true);
   };
 
+  const handleDownload = () => {
+    // Create a temporary link element
+    const link = document.createElement('a');
+    link.href = photoUrl;
+    link.download = `photo-${photoId}.jpg`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Calculate days until deletion (7 days from when the photo was processed)
+  const calculateDaysRemaining = () => {
+    const processedDate = new Date(createdAt);
+    const expirationDate = new Date(processedDate);
+    expirationDate.setDate(expirationDate.getDate() + 7);
+    
+    const now = new Date();
+    return Math.max(0, Math.ceil((expirationDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+  };
+
   if (loading) {
     return (
       <div className="w-full h-64 flex items-center justify-center">
@@ -72,6 +98,29 @@ export const PhotoViewer: React.FC<PhotoViewerProps> = ({ photoId, photoUrl, pro
 
   return (
     <div className="relative">
+      {processed && (
+        <div className="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-md mb-4">
+          <div className="flex items-start">
+            <AlertTriangle className="h-5 w-5 text-yellow-500 dark:text-yellow-400 mr-2 mt-0.5 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-yellow-800 dark:text-yellow-300">
+                Photo will be deleted in {calculateDaysRemaining()} days
+              </p>
+              <p className="text-sm text-yellow-700 dark:text-yellow-400 mt-1">
+                Please download any photos you want to keep before they are permanently deleted.
+              </p>
+            </div>
+            <button
+              onClick={handleDownload}
+              className="ml-4 px-3 py-1.5 bg-yellow-100 dark:bg-yellow-800 text-yellow-800 dark:text-yellow-300 rounded-md text-sm flex items-center hover:bg-yellow-200 dark:hover:bg-yellow-700 transition-colors"
+            >
+              <Download className="h-4 w-4 mr-1.5" />
+              Download
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Photo container */}
       <div className="relative rounded-lg overflow-hidden">
         <img 
@@ -131,6 +180,22 @@ export const PhotoViewer: React.FC<PhotoViewerProps> = ({ photoId, photoUrl, pro
             })}
           </div>
         )}
+      </div>
+      
+      {/* Controls */}
+      <div className="mt-4 flex justify-between items-center">
+        <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
+          <Clock className="h-4 w-4 mr-1.5" />
+          <span>Processed on {new Date(createdAt).toLocaleDateString()}</span>
+        </div>
+        
+        <button
+          onClick={handleDownload}
+          className="px-3 py-1.5 bg-gray-100 dark:bg-gray-700 rounded-md text-sm flex items-center hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+        >
+          <Download className="h-4 w-4 mr-1.5" />
+          Download Photo
+        </button>
       </div>
       
       {/* Faces information */}

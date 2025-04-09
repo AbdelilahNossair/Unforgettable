@@ -189,7 +189,7 @@ export const Landing: React.FC = () => {
             <div className="max-w-3xl">
               <h1 className="text-4xl sm:text-6xl lg:text-8xl font-light tracking-tight">
                 <span className="block">Revolutionize</span>
-                <span className="block mt-2 text-transparent bg-clip-text bg-gradient-to-r from-emerald-700 via-emerald-600 to-emerald-500 dark:from-emerald-400 dark:via-emerald-500 dark:to-emerald-600">
+                <span className="block mt-2 py-2 text-transparent bg-clip-text bg-gradient-to-r from-emerald-700 via-emerald-600 to-emerald-500 dark:from-emerald-400 dark:via-emerald-500 dark:to-emerald-600">
                   Event Recognition
                 </span>
               </h1>
