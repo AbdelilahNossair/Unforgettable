@@ -829,36 +829,6 @@ export const registerFace = async (eventCode: string, userId: string, imageFile:
   }
 };
 
-/**
- * Process a single photo with the Python API
- */
-export const processPhoto = async (photoId: string): Promise<any> => {
-  try {
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-    const supabaseKey = import.meta.env.VITE_SUPABASE_SERVICE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-    
-    const formData = new FormData();
-    formData.append('photo_id', photoId);
-    formData.append('supabase_url', supabaseUrl);
-    formData.append('supabase_key', supabaseKey);
-
-    // Call the Python API endpoint
-    const response = await fetch(`${FACE_API_URL}/process-photo`, {
-      method: 'POST',
-      body: formData,
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || 'Failed to process photo');
-    }
-
-    return await response.json();
-  } catch (error) {
-    console.error(`Error processing photo ${photoId}:`, error);
-    throw error;
-  }
-};
 
 /**
  * Process multiple photos in sequence
@@ -982,6 +952,56 @@ export const registerForEvent = async (eventCode: string, userId: string, faceIm
     };
   } catch (error) {
     console.error('Error registering for event:', error);
+    throw error;
+  }
+};
+
+/**
+ * Process a single photo with the Python API
+ */
+export const processPhoto = async (photoId: string): Promise<any> => {
+  try {
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+    const supabaseKey = import.meta.env.VITE_SUPABASE_SERVICE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+    
+    // Get the API URL correctly without quotes
+    const apiUrl = import.meta.env.VITE_FACE_API_URL || 'http://localhost:5000';
+    
+    const formData = new FormData();
+    formData.append('photo_id', photoId);
+    formData.append('supabase_url', supabaseUrl);
+    formData.append('supabase_key', supabaseKey);
+
+    // Use string concatenation to avoid any issues with template literals
+    const url = apiUrl + '/process-photo';
+    
+    console.log('Calling API endpoint:', url);
+
+    // Call the Python API endpoint
+    const response = await fetch(url, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      // Check if there's actually a JSON response before trying to parse it
+      const text = await response.text();
+      let errorMessage = 'Failed to process photo';
+      try {
+        if (text) {
+          const errorData = JSON.parse(text);
+          errorMessage = errorData.error || errorMessage;
+        }
+      } catch (e) {
+        // If JSON parsing fails, use the raw text or status
+        errorMessage = text || `HTTP error ${response.status}`;
+      }
+      throw new Error(errorMessage);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error(`Error processing photo ${photoId}:`, error);
     throw error;
   }
 };

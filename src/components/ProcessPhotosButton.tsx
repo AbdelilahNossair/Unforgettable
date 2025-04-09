@@ -29,7 +29,9 @@ export const ProcessPhotosButton: React.FC<ProcessPhotosButtonProps> = ({
   // Check the API status
   const checkApiStatus = async () => {
     try {
+      console.log('Checking API availability...');
       const isAvailable = await faceApiService.isAvailable();
+      console.log('API available:', isAvailable);
       setApiAvailable(isAvailable);
     } catch (error) {
       console.error('Error checking API status:', error);
@@ -99,7 +101,7 @@ export const ProcessPhotosButton: React.FC<ProcessPhotosButtonProps> = ({
       const photoIds = photos.map(p => p.id);
       
       // Process photos in batches
-      const batchSize = 2; // Process 2 at a time to avoid overwhelming the API
+      const batchSize = 1; // Process 1 at a time to avoid overwhelming the API
       const batches = [];
       let processed = 0;
       
@@ -118,6 +120,7 @@ export const ProcessPhotosButton: React.FC<ProcessPhotosButtonProps> = ({
         // Process this batch using the Python backend
         await Promise.all(batch.map(async (photoId) => {
           try {
+            console.log(`Processing photo ${photoId}...`);
             // Call the Face API service to process this photo
             await faceApiService.processPhoto(photoId);
             processed++;
@@ -128,6 +131,8 @@ export const ProcessPhotosButton: React.FC<ProcessPhotosButtonProps> = ({
             toast.loading(`Processing photos: ${processed}/${photoIds.length}`, {
               id: progressToast
             });
+            
+            console.log(`Successfully processed photo ${photoId}`);
           } catch (err) {
             console.error(`Error processing photo ${photoId}:`, err);
           }
@@ -180,6 +185,23 @@ export const ProcessPhotosButton: React.FC<ProcessPhotosButtonProps> = ({
   if (apiAvailable === false) {
     return (
       <div className={`w-full ${className}`}>
+        <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
+          <div className="flex items-start">
+            <AlertTriangle className="h-5 w-5 text-red-500 dark:text-red-400 mr-2 mt-0.5 flex-shrink-0" />
+            <div className="text-sm">
+              <p className="font-medium text-red-800 dark:text-red-400">Face API unavailable</p>
+              <p className="text-red-700 dark:text-red-300 mt-1">
+                The face recognition service is currently unavailable. Please ensure the Python backend is running.
+              </p>
+              <button 
+                onClick={checkApiStatus}
+                className="mt-2 text-red-700 dark:text-red-300 underline"
+              >
+                Retry connection
+              </button>
+            </div>
+          </div>
+        </div>
         <button
           disabled
           className="w-full flex items-center justify-center px-4 py-2 bg-red-500 text-white rounded-md opacity-70 cursor-not-allowed"
@@ -187,9 +209,6 @@ export const ProcessPhotosButton: React.FC<ProcessPhotosButtonProps> = ({
           <AlertTriangle className="h-4 w-4 mr-2" />
           Face API unavailable
         </button>
-        <p className="mt-2 text-xs text-red-500 dark:text-red-400 text-center">
-          The face recognition service is currently unavailable
-        </p>
       </div>
     );
   }

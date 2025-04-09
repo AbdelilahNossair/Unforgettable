@@ -9,10 +9,15 @@ class FaceApiService {
     private supabaseKey: string;
   
     constructor() {
-      // Use import.meta.env instead of process.env for Vite projects
-      this.apiUrl = import.meta.env.VITE_FACE_API_URL || 'http://localhost:5000';
+      // Get API URL and remove any quotes
+      const rawApiUrl = import.meta.env.VITE_FACE_API_URL || 'http://localhost:5000';
+      // Clean the URL by removing any quotes
+      this.apiUrl = rawApiUrl.replace(/["']/g, '');
+      
       this.supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
       this.supabaseKey = import.meta.env.VITE_SUPABASE_SERVICE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+      
+      console.log('FaceApiService initialized with URL:', this.apiUrl);
     }
   
     /**
@@ -20,6 +25,7 @@ class FaceApiService {
      */
     async checkHealth(): Promise<{ status: string; model_loaded: boolean }> {
       try {
+        console.log('Checking health at:', `${this.apiUrl}/health`);
         const response = await fetch(`${this.apiUrl}/health`);
         if (!response.ok) {
           throw new Error(`API health check failed: ${response.statusText}`);
@@ -71,14 +77,26 @@ class FaceApiService {
         formData.append('supabase_url', this.supabaseUrl);
         formData.append('supabase_key', this.supabaseKey);
   
+        console.log('Processing photo at:', `${this.apiUrl}/process-photo`);
+        
         const response = await fetch(`${this.apiUrl}/process-photo`, {
           method: 'POST',
           body: formData,
         });
   
         if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || 'Failed to process photo');
+          // Handle non-JSON responses gracefully
+          const text = await response.text();
+          let errorMessage = 'Failed to process photo';
+          try {
+            if (text) {
+              const errorData = JSON.parse(text);
+              errorMessage = errorData.error || errorMessage;
+            }
+          } catch (e) {
+            errorMessage = text || `HTTP error ${response.status}`;
+          }
+          throw new Error(errorMessage);
         }
   
         return await response.json();
