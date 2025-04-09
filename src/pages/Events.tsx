@@ -8,8 +8,12 @@ import { useAuthStore } from '../store';
 import { supabase } from '../lib/supabase';
 import { toast } from 'sonner';
 import { ImageUpload } from '../components/ImageUpload';
-import { Pencil, Trash2, Plus, Calendar, MapPin, Users, Building2, User, Clock, X, Check, Camera, Upload } from 'lucide-react';
-import { deleteEvent, updateEvent, createEvent } from '../lib/api';
+import { ProcessPhotosButton } from '../components/ProcessPhotosButton';
+import { 
+  Pencil, Trash2, Plus, Calendar, MapPin, Users, Building2, 
+  User, Clock, X, Check, Camera, Upload, AlertTriangle, CheckCircle
+} from 'lucide-react';
+import { deleteEvent, updateEvent, createEvent, processEventPhotos } from '../lib/api';
 import { Database } from '../lib/supabase-types';
 
 type Event = Database['public']['Tables']['events']['Row'];
@@ -24,6 +28,7 @@ interface EventForm {
   host_name: string;
   expected_attendees: number;
   image_url: string;
+  status?: 'upcoming' | 'active' | 'completed' | 'archived';
 }
 
 const sortOptions = [
@@ -81,7 +86,13 @@ export const Events: React.FC = () => {
 
   const fetchEvents = async () => {
     try {
-      let query = supabase.from('events').select('*').order('date', { ascending: true });
+      let query = supabase
+        .from('events')
+        .select(`
+          *,
+          event_photographers(*)
+        `)
+        .order('date', { ascending: true });
 
       if (user?.role === 'photographer') {
         const { data: photographerEvents, error: photographerError } = await supabase
@@ -112,6 +123,8 @@ export const Events: React.FC = () => {
             .select(`
               id,
               photographer_id,
+              uploads_complete,
+              last_upload_at,
               users (
                 id,
                 email,
@@ -122,9 +135,32 @@ export const Events: React.FC = () => {
 
           if (photographersError) throw photographersError;
 
+          // Calculate if all photographers have completed their uploads
+          const allPhotographersComplete = photographers && photographers.length > 0 && 
+            photographers.every(p => p.uploads_complete);
+          
+          // Determine true event status based on date and photographer upload status
+          let calculatedStatus = event.status;
+          if (!calculatedStatus) {
+            const eventDate = new Date(event.date);
+            const now = new Date();
+            
+            if (eventDate > now) {
+              calculatedStatus = 'upcoming';
+            } else {
+              calculatedStatus = 'active';
+            }
+
+            // Only mark as completed if all photographers have uploaded their photos
+            if (photographers && photographers.length > 0 && allPhotographersComplete) {
+              calculatedStatus = 'completed';
+            }
+          }
+
           return {
             ...event,
             photographers: photographers || [],
+            calculatedStatus
           };
         })
       );
@@ -138,16 +174,15 @@ export const Events: React.FC = () => {
     }
   };
 
-  const getEventStatus = (event: Event) => {
+  const getEventStatus = (event: Event): 'upcoming' | 'active' | 'completed' | 'archived' => {
+    // Always determine status based on date only when creating/updating
     const eventDate = new Date(event.date);
     const now = new Date();
 
     if (eventDate > now) {
       return 'upcoming';
-    } else if (eventDate <= now && !event.image_url) {
-      return 'active';
     } else {
-      return 'completed';
+      return 'active'; // Past events are active until photographers mark completion
     }
   };
 
@@ -218,21 +253,39 @@ export const Events: React.FC = () => {
 
       toast.success(`${files.length} photo${files.length === 1 ? '' : 's'} uploaded successfully`);
 
+      // Update photographer upload status to "not complete" but with last upload time
+      await updatePhotographerUploadStatus(eventId, user?.id || '', false);
+
       const isDone = window.confirm(
         'Photos uploaded successfully! Are you done uploading photos for this event? Click OK if you\'re finished, or Cancel if you have more photos to upload.'
       );
 
       if (isDone) {
-        const { error: updateError } = await supabase
-          .from('events')
-          .update({ status: 'completed' })
-          .eq('id', eventId);
+        // Mark this photographer's uploads as complete
+        await updatePhotographerUploadStatus(eventId, user?.id || '', true);
+        
+        // Check if all photographers have completed their uploads
+        const { data: allDone } = await checkAllPhotographersDone(eventId);
+        
+        // If all photographers are done, mark the event as completed
+        if (allDone) {
+          const { error: updateError } = await supabase
+            .from('events')
+            .update({ 
+              status: 'completed',
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', eventId);
 
-        if (updateError) {
-          throw updateError;
+          if (updateError) {
+            throw updateError;
+          }
+
+          toast.success('All photographers have completed uploads. Event marked as completed!');
+        } else {
+          toast.success('Your uploads are marked as complete. Event will be finalized when all photographers finish.');
         }
-
-        toast.success('Event marked as completed');
+        
         await fetchEvents();
       }
 
@@ -241,6 +294,77 @@ export const Events: React.FC = () => {
       toast.error('Failed to upload photos');
     } finally {
       setUploadingPhotos(prev => ({ ...prev, [eventId]: false }));
+    }
+  };
+
+  // Function to update photographer upload status
+  const updatePhotographerUploadStatus = async (eventId: string, photographerId: string, isDone: boolean) => {
+    try {
+      // Check if record exists
+      const { data: existing, error: checkError } = await supabase
+        .from('event_photographers')
+        .select('id')
+        .eq('event_id', eventId)
+        .eq('photographer_id', photographerId)
+        .single();
+        
+      if (checkError && checkError.code !== 'PGRST116') { // Not found error
+        throw checkError;
+      }
+      
+      if (existing) {
+        // Update existing record
+        const { error: updateError } = await supabase
+          .from('event_photographers')
+          .update({ 
+            uploads_complete: isDone,
+            last_upload_at: new Date().toISOString()
+          })
+          .eq('event_id', eventId)
+          .eq('photographer_id', photographerId);
+          
+        if (updateError) throw updateError;
+      } else {
+        // Create new record
+        const { error: insertError } = await supabase
+          .from('event_photographers')
+          .insert({
+            event_id: eventId,
+            photographer_id: photographerId,
+            uploads_complete: isDone,
+            last_upload_at: new Date().toISOString()
+          });
+          
+        if (insertError) throw insertError;
+      }
+    } catch (error) {
+      console.error('Error updating photographer status:', error);
+      throw error;
+    }
+  };
+  
+  // Function to check if all photographers have completed uploads
+  const checkAllPhotographersDone = async (eventId: string) => {
+    try {
+      // Get all photographers assigned to this event
+      const { data: photographers, error: getError } = await supabase
+        .from('event_photographers')
+        .select('uploads_complete')
+        .eq('event_id', eventId);
+        
+      if (getError) throw getError;
+      
+      // If no photographers assigned, consider it done
+      if (!photographers || photographers.length === 0) {
+        return { data: true };
+      }
+      
+      // Check if all photographers have marked uploads as complete
+      const allDone = photographers.every(p => p.uploads_complete === true);
+      return { data: allDone };
+    } catch (error) {
+      console.error('Error checking photographer status:', error);
+      throw error;
     }
   };
 
@@ -256,17 +380,22 @@ export const Events: React.FC = () => {
       host_name: event.host_name || '',
       expected_attendees: event.expected_attendees || 0,
       image_url: event.image_url || '',
+      status: event.status || undefined
     });
   };
 
   const handleUpdate = async (id: string) => {
     try {
+      // Only update status if it's not already set in form
+      // This preserves existing status if set, or calculates a new one based on date
+      const status = form.status || getEventStatus({
+        ...form,
+        date: new Date(form.date).toISOString(),
+      } as Event);
+      
       await updateEvent(id, {
         ...form,
-        status: getEventStatus({
-          ...form,
-          date: new Date(form.date).toISOString(),
-        } as Event),
+        status
       }, selectedImage || undefined);
 
       setEditingEvent(null);
@@ -506,6 +635,22 @@ export const Events: React.FC = () => {
                     className="w-full px-4 py-2 border rounded dark:bg-gray-700 dark:border-gray-600"
                     placeholder="Expected Attendees"
                   />
+                  {isAdmin && (
+                    <select
+                      value={form.status || ''}
+                      onChange={(e) => setForm({ 
+                        ...form, 
+                        status: e.target.value as 'upcoming' | 'active' | 'completed' | 'archived' 
+                      })}
+                      className="w-full px-4 py-2 border rounded dark:bg-gray-700 dark:border-gray-600"
+                    >
+                      <option value="">Auto (based on date)</option>
+                      <option value="upcoming">Upcoming</option>
+                      <option value="active">Active</option>
+                      <option value="completed">Completed</option>
+                      <option value="archived">Archived</option>
+                    </select>
+                  )}
                   <div className="flex justify-end space-x-2">
                     <button
                       onClick={() => {
@@ -533,6 +678,17 @@ export const Events: React.FC = () => {
                         alt={event.name}
                         className="w-full h-full object-cover"
                       />
+                      {/* Event status badge */}
+                      <div className="absolute top-2 left-2">
+                        <span className={`px-2 py-1 text-xs font-semibold rounded-full 
+                          ${event.status === 'upcoming' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300' : 
+                            event.status === 'active' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300' :
+                            event.status === 'completed' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300' :
+                            'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300'}`}
+                        >
+                          {event.status || 'unknown'}
+                        </span>
+                      </div>
                       {isAdmin && (
                         <div className="absolute top-2 right-2 flex space-x-2">
                           <button
@@ -553,7 +709,19 @@ export const Events: React.FC = () => {
                   )}
                   <div className="p-6">
                     <div className="flex justify-between items-start">
-                      <h2 className="text-xl font-semibold mb-2">{event.name}</h2>
+                      <div>
+                        <h2 className="text-xl font-semibold mb-1">{event.name}</h2>
+                        {!event.image_url && (
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium mb-2
+                            ${event.status === 'upcoming' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300' : 
+                              event.status === 'active' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300' :
+                              event.status === 'completed' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300' :
+                              'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300'}`}
+                          >
+                            {event.status || 'unknown'}
+                          </span>
+                        )}
+                      </div>
                       {!event.image_url && isAdmin && (
                         <div className="flex space-x-2">
                           <button
@@ -601,32 +769,49 @@ export const Events: React.FC = () => {
 
                     {isPhotographer && (
                       <div className="mt-6 pt-4 border-t dark:border-gray-700">
-                        <input
-                          type="file"
-                          id={`photo-upload-${event.id}`}
-                          multiple
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(e) => e.target.files && handlePhotoUpload(event.id, e.target.files)}
-                        />
-                        <label
-                          htmlFor={`photo-upload-${event.id}`}
-                          className={`flex items-center justify-center w-full px-4 py-2 text-sm font-medium text-white bg-gray-900 dark:text-black dark:bg-white rounded-md hover:bg-gray-800 dark:hover:bg-gray-100 cursor-pointer transition-colors ${
-                            uploadingPhotos[event.id] ? 'opacity-50 cursor-not-allowed' : ''
-                          }`}
-                        >
-                          {uploadingPhotos[event.id] ? (
-                            <>
-                              <Upload className="h-4 w-4 mr-2 animate-bounce" />
-                              Uploading...
-                            </>
-                          ) : (
-                            <>
-                              <Camera className="h-4 w-4 mr-2" />
-                              Upload Photos
-                            </>
+                        <div className="flex justify-between items-center mb-3">
+                          <h3 className="text-sm font-medium text-gray-900 dark:text-white">
+                            Photos
+                          </h3>
+                          {event.status === 'completed' && (
+                            <span className="text-xs text-green-600 dark:text-green-400 flex items-center">
+                              <CheckCircle className="h-3 w-3 mr-1" />
+                              All uploads complete
+                            </span>
                           )}
-                        </label>
+                        </div>
+                        
+                        {/* Don't show upload button for completed events */}
+                        {event.status !== 'completed' && (
+                          <>
+                            <input
+                              type="file"
+                              id={`photo-upload-${event.id}`}
+                              multiple
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(e) => e.target.files && handlePhotoUpload(event.id, e.target.files)}
+                            />
+                            <label
+                              htmlFor={`photo-upload-${event.id}`}
+                              className={`flex items-center justify-center w-full px-4 py-2 text-sm font-medium text-white bg-gray-900 dark:text-black dark:bg-white rounded-md hover:bg-gray-800 dark:hover:bg-gray-100 cursor-pointer transition-colors ${
+                                uploadingPhotos[event.id] ? 'opacity-50 cursor-not-allowed' : ''
+                              }`}
+                            >
+                              {uploadingPhotos[event.id] ? (
+                                <>
+                                  <Upload className="h-4 w-4 mr-2 animate-bounce" />
+                                  Uploading...
+                                </>
+                              ) : (
+                                <>
+                                  <Camera className="h-4 w-4 mr-2" />
+                                  Upload Photos
+                                </>
+                              )}
+                            </label>
+                          </>
+                        )}
                       </div>
                     )}
 
@@ -651,6 +836,32 @@ export const Events: React.FC = () => {
                           hostName={event.host_name}
                           imageUrl={event.image_url}
                         />
+                      </div>
+                    )}
+
+                    {isAdmin && (
+                      <div className="mt-6 pt-4 border-t dark:border-gray-700">
+                        <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-2">
+                          Admin Controls
+                        </h3>
+                        
+                        <div className="space-y-4">
+                          {/* Existing PhotographerSelect component */}
+                          <div>
+                            <h4 className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
+                              Assigned Photographers
+                            </h4>
+                            <PhotographerSelect eventId={event.id} />
+                          </div>
+                          
+                          {/* Process Photos Button */}
+                          <div>
+                            <h4 className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
+                              Photo Processing
+                            </h4>
+                            <ProcessPhotosButton eventId={event.id} />
+                          </div>
+                        </div>
                       </div>
                     )}
                   </div>

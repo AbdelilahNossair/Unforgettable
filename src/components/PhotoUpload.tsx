@@ -1,10 +1,11 @@
 import React, { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { Camera, Upload, X, CheckCircle } from 'lucide-react';
+import { Camera, Upload, X, CheckCircle, AlertTriangle, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store';
 import { v4 as uuidv4 } from 'uuid';
+import { processPhoto } from '../lib/api';
 
 interface PhotoUploadProps {
   eventId: string;
@@ -15,7 +16,7 @@ interface PhotoUploadProps {
 export const PhotoUpload: React.FC<PhotoUploadProps> = ({
   eventId,
   onUploadComplete,
-  maxFilesPerBatch = 10,
+  maxFilesPerBatch = 5, // Reduced batch size for better performance
 }) => {
   const { user } = useAuthStore();
   const [files, setFiles] = useState<File[]>([]);
@@ -23,6 +24,10 @@ export const PhotoUpload: React.FC<PhotoUploadProps> = ({
   const [isUploading, setIsUploading] = useState(false);
   const [showCompletionPrompt, setShowCompletionPrompt] = useState(false);
   const [uploadedPhotoIds, setUploadedPhotoIds] = useState<string[]>([]);
+  const [processingStatus, setProcessingStatus] = useState<string>('');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
+  const [totalPhotos, setTotalPhotos] = useState(0);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     // Filter for images only
@@ -135,6 +140,10 @@ export const PhotoUpload: React.FC<PhotoUploadProps> = ({
         setPreviews([]);
         
         toast.success(`Successfully uploaded ${photoIds.length} photo${photoIds.length > 1 ? 's' : ''}`);
+        
+        // Update photographer upload status
+        await updatePhotographerUploadStatus(eventId, user.id, false); // mark as uploaded but not complete
+        
         setShowCompletionPrompt(true);
       } else {
         toast.error('Failed to upload any photos');
@@ -157,43 +166,157 @@ export const PhotoUpload: React.FC<PhotoUploadProps> = ({
       return;
     }
 
-    setIsUploading(true);
+    setIsProcessing(true);
+    setProcessingStatus('Preparing to process photos...');
+    setTotalPhotos(uploadedPhotoIds.length);
+    setCurrentPhotoIndex(0);
+    
     try {
-      // Call Supabase Edge Function to process photos
-      for (const photoId of uploadedPhotoIds) {
-        const { error } = await supabase.functions.invoke('process-photo', {
-          body: { photoId }
-        });
-
-        if (error) {
+      // Mark photographer as done with uploads
+      await updatePhotographerUploadStatus(eventId, user.id, true);
+      
+      // Check if all photographers are done
+      const { data: allDone } = await checkAllPhotographersDone(eventId);
+      
+      // Process each photo with the Python backend
+      const processedIds = [];
+      
+      // Process photos one at a time with the Python backend
+      for (let i = 0; i < uploadedPhotoIds.length; i++) {
+        const photoId = uploadedPhotoIds[i];
+        setCurrentPhotoIndex(i + 1);
+        setProcessingStatus(`Processing photo ${i + 1} of ${uploadedPhotoIds.length}...`);
+        
+        try {
+          // Check if the photo is already processed
+          const { data: photoData } = await supabase
+            .from('photos')
+            .select('processed')
+            .eq('id', photoId)
+            .single();
+            
+          if (photoData?.processed) {
+            processedIds.push(photoId);
+            continue;
+          }
+          
+          // Process the photo with the Python backend
+          await processPhoto(photoId);
+          processedIds.push(photoId);
+          
+          // Add a delay between photos to avoid overwhelming the API
+          if (i < uploadedPhotoIds.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          }
+        } catch (error) {
           console.error(`Error processing photo ${photoId}:`, error);
-          // Continue with other photos even if one fails
+          toast.error(`Failed to process photo. The system will try again later.`);
         }
       }
-
-      // Update the event status to indicate photos are being processed
-      await supabase
-        .from('events')
-        .update({ 
-          status: 'processing_photos',
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', eventId);
-
-      toast.success('Photo uploads completed. Processing started!');
+      
+      setProcessingStatus('Processing complete!');
+      
+      // If all photographers are done, mark the event as completed
+      if (allDone) {
+        await supabase
+          .from('events')
+          .update({ 
+            status: 'completed',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', eventId);
+          
+        toast.success('All photographers have completed uploads. Event marked as completed!');
+      } else {
+        toast.success('Your uploads are marked as complete. Event will be finalized when all photographers finish.');
+      }
       
       if (onUploadComplete) {
         onUploadComplete();
       }
       
       // Reset the component state
-      setShowCompletionPrompt(false);
-      setUploadedPhotoIds([]);
+      setTimeout(() => {
+        setShowCompletionPrompt(false);
+        setUploadedPhotoIds([]);
+        setIsProcessing(false);
+      }, 2000);
+      
     } catch (error) {
       console.error('Error completing photo uploads:', error);
       toast.error('Failed to complete photo uploads. Please try again.');
-    } finally {
-      setIsUploading(false);
+      setIsProcessing(false);
+    }
+  };
+  
+  // Function to update photographer upload status
+  const updatePhotographerUploadStatus = async (eventId: string, photographerId: string, isDone: boolean) => {
+    try {
+      // Check if record exists
+      const { data: existing, error: checkError } = await supabase
+        .from('event_photographers')
+        .select('id')
+        .eq('event_id', eventId)
+        .eq('photographer_id', photographerId)
+        .single();
+        
+      if (checkError && checkError.code !== 'PGRST116') { // Not found error
+        throw checkError;
+      }
+      
+      if (existing) {
+        // Update existing record
+        const { error: updateError } = await supabase
+          .from('event_photographers')
+          .update({ 
+            uploads_complete: isDone,
+            last_upload_at: new Date().toISOString()
+          })
+          .eq('event_id', eventId)
+          .eq('photographer_id', photographerId);
+          
+        if (updateError) throw updateError;
+      } else {
+        // Create new record
+        const { error: insertError } = await supabase
+          .from('event_photographers')
+          .insert({
+            event_id: eventId,
+            photographer_id: photographerId,
+            uploads_complete: isDone,
+            last_upload_at: new Date().toISOString()
+          });
+          
+        if (insertError) throw insertError;
+      }
+    } catch (error) {
+      console.error('Error updating photographer status:', error);
+      throw error;
+    }
+  };
+  
+  // Function to check if all photographers have completed uploads
+  const checkAllPhotographersDone = async (eventId: string) => {
+    try {
+      // Get all photographers assigned to this event
+      const { data: photographers, error: getError } = await supabase
+        .from('event_photographers')
+        .select('uploads_complete')
+        .eq('event_id', eventId);
+        
+      if (getError) throw getError;
+      
+      // If no photographers assigned, consider it done
+      if (!photographers || photographers.length === 0) {
+        return { data: true };
+      }
+      
+      // Check if all photographers have marked uploads as complete
+      const allDone = photographers.every(p => p.uploads_complete === true);
+      return { data: allDone };
+    } catch (error) {
+      console.error('Error checking photographer status:', error);
+      throw error;
     }
   };
 
@@ -208,33 +331,55 @@ export const PhotoUpload: React.FC<PhotoUploadProps> = ({
             You've uploaded {uploadedPhotoIds.length} photo{uploadedPhotoIds.length !== 1 ? 's' : ''}. 
             Would you like to upload more or are you finished?
           </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-end">
-            <button
-              onClick={handleContinueUploading}
-              disabled={isUploading}
-              className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
-            >
-              Upload More Photos
-            </button>
-            <button
-              onClick={handleCompleteUploads}
-              disabled={isUploading}
-              className="px-4 py-2 bg-gray-900 dark:bg-white text-white dark:text-black rounded-md hover:bg-gray-800 dark:hover:bg-gray-100 transition-colors flex items-center justify-center"
-            >
-              {isUploading ? (
-                <>
-                  <span className="animate-spin mr-2">
-                    <Upload className="h-4 w-4" />
-                  </span>
-                  Processing...
-                </>
-              ) : (
-                <>
-                  <CheckCircle className="h-4 w-4 mr-2" />
-                  I'm Done
-                </>
-              )}
-            </button>
+          
+          {isProcessing ? (
+            <div className="rounded-lg bg-gray-50 dark:bg-gray-700 p-4 mb-4">
+              <div className="flex flex-col items-center">
+                <Loader2 className="h-10 w-10 text-blue-500 animate-spin mb-4" />
+                <p className="text-sm font-medium text-gray-900 dark:text-white">{processingStatus}</p>
+                {totalPhotos > 0 && (
+                  <div className="w-full mt-4">
+                    <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2.5">
+                      <div 
+                        className="bg-blue-600 h-2.5 rounded-full" 
+                        style={{ width: `${(currentPhotoIndex / totalPhotos) * 100}%` }}
+                      ></div>
+                    </div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 text-center mt-1">
+                      {currentPhotoIndex} of {totalPhotos} photos
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col sm:flex-row gap-4 justify-end">
+              <button
+                onClick={handleContinueUploading}
+                disabled={isProcessing}
+                className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors disabled:opacity-50"
+              >
+                Upload More Photos
+              </button>
+              <button
+                onClick={handleCompleteUploads}
+                disabled={isProcessing}
+                className="px-4 py-2 bg-gray-900 dark:bg-white text-white dark:text-black rounded-md hover:bg-gray-800 dark:hover:bg-gray-100 transition-colors flex items-center justify-center disabled:opacity-50"
+              >
+                <CheckCircle className="h-4 w-4 mr-2" />
+                I'm Done With This Event
+              </button>
+            </div>
+          )}
+          
+          <div className="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-md">
+            <div className="flex items-start">
+              <AlertTriangle className="h-5 w-5 text-yellow-500 dark:text-yellow-400 mt-0.5 mr-2 flex-shrink-0" />
+              <div className="text-sm text-yellow-700 dark:text-yellow-300">
+                <p className="font-medium">Processing will begin immediately</p>
+                <p className="mt-1">This may take several minutes depending on the number of photos. The page will update when processing is complete.</p>
+              </div>
+            </div>
           </div>
         </div>
       ) : (

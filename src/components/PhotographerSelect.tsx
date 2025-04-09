@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Camera, Loader2, Plus, X } from 'lucide-react';
+import { Camera, Loader2, Plus, X, CheckCircle, Clock } from 'lucide-react';
 import { getPhotographers, getEventPhotographers, assignPhotographer, removePhotographer } from '../lib/api';
 import { toast } from 'sonner';
 import { Database } from '../lib/supabase-types';
@@ -7,6 +7,8 @@ import { Database } from '../lib/supabase-types';
 type User = Database['public']['Tables']['users']['Row'];
 type EventPhotographer = Database['public']['Tables']['event_photographers']['Row'] & {
   users: User;
+  uploads_complete?: boolean;
+  last_upload_at?: string;
 };
 
 interface PhotographerSelectProps {
@@ -99,6 +101,13 @@ export const PhotographerSelect: React.FC<PhotographerSelectProps> = ({ eventId,
     );
   }
 
+  // Check if all photographers have completed their uploads
+  const allPhotographersComplete = assignedPhotographers.length > 0 && 
+    assignedPhotographers.every(p => p.uploads_complete === true);
+  
+  // Check if any photographers have started uploading
+  const anyPhotographersStarted = assignedPhotographers.some(p => p.last_upload_at !== null);
+
   return (
     <div className={`space-y-4 ${className}`}>
       {availablePhotographers.length > 0 && (
@@ -127,9 +136,33 @@ export const PhotographerSelect: React.FC<PhotographerSelectProps> = ({ eventId,
 
       {assignedPhotographers.length > 0 && (
         <div className="space-y-2">
-          <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">
-            Assigned Photographers ({assignedPhotographers.length})
-          </h4>
+          <div className="flex justify-between items-center">
+            <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              Assigned Photographers ({assignedPhotographers.length})
+            </h4>
+            
+            {/* Upload status indicator */}
+            {assignedPhotographers.length > 0 && (
+              <div className="text-xs">
+                {allPhotographersComplete ? (
+                  <span className="text-green-600 dark:text-green-400 flex items-center">
+                    <CheckCircle className="h-3 w-3 mr-1" />
+                    All uploads complete
+                  </span>
+                ) : anyPhotographersStarted ? (
+                  <span className="text-yellow-600 dark:text-yellow-400 flex items-center">
+                    <Clock className="h-3 w-3 mr-1" />
+                    Uploads in progress
+                  </span>
+                ) : (
+                  <span className="text-gray-500 dark:text-gray-400">
+                    No uploads yet
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+          
           {assignedPhotographers.map((assignment) => (
             <div
               key={assignment.id}
@@ -137,9 +170,27 @@ export const PhotographerSelect: React.FC<PhotographerSelectProps> = ({ eventId,
             >
               <div className="flex items-center space-x-3">
                 <Camera className="h-5 w-5 text-gray-500" />
-                <span className="text-sm font-medium">
-                  {assignment.users.email}
-                </span>
+                <div>
+                  <span className="text-sm font-medium">
+                    {assignment.users.email}
+                  </span>
+                  
+                  {/* Show upload status if available */}
+                  {assignment.last_upload_at && (
+                    <div className="text-xs mt-1">
+                      {assignment.uploads_complete ? (
+                        <span className="text-green-600 dark:text-green-400 flex items-center">
+                          <CheckCircle className="h-3 w-3 mr-1" />
+                          Uploads complete
+                        </span>
+                      ) : (
+                        <span className="text-yellow-600 dark:text-yellow-400">
+                          Last upload: {new Date(assignment.last_upload_at).toLocaleDateString()}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
               <button
                 onClick={() => handleRemove(assignment.photographer_id)}

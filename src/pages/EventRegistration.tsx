@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Camera, Upload, CheckCircle, Loader2, AlertTriangle } from 'lucide-react';
+import { Camera, Upload, CheckCircle, Loader2, AlertTriangle, Calendar, Clock } from 'lucide-react';
 import { ImageUpload } from '../components/ImageUpload';
 import { useAuthStore } from '../store';
 import { toast } from 'sonner';
@@ -37,10 +37,10 @@ export const EventRegistration: React.FC = () => {
         return;
       }
 
-      // Check if event is in the past
-      const eventDate = new Date(event.date);
-      if (eventDate < new Date()) {
-        toast.error('This event has already taken place');
+      // Check event status instead of date
+      // Only prevent registration for completed or archived events
+      if (event.status === 'completed' || event.status === 'archived') {
+        toast.error('This event has ended and photos have been processed. Registration is closed.');
         navigate('/');
         return;
       }
@@ -110,6 +110,8 @@ export const EventRegistration: React.FC = () => {
         setError('No face detected in the image. Please upload a clear photo of your face.');
       } else if (errorMessage.includes('Multiple faces detected')) {
         setError('Multiple faces detected. Please upload a photo with only your face.');
+      } else if (errorMessage.includes('Already registered')) {
+        setError('You are already registered for this event.');
       } else {
         setError(errorMessage);
       }
@@ -141,14 +143,27 @@ export const EventRegistration: React.FC = () => {
     );
   }
 
+  // Determine if event is active/ongoing based on status
+  const isActive = event.status === 'active';
+  const isPast = new Date(event.date) < new Date();
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-black py-12">
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden">
           <div className="px-6 py-8">
-            <h1 className="text-2xl font-semibold text-gray-900 dark:text-white mb-6">
-              Register for {event.name}
-            </h1>
+            <div className="flex justify-between items-start mb-6">
+              <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">
+                Register for {event.name}
+              </h1>
+              
+              {isActive && (
+                <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300">
+                  <Clock className="w-4 h-4 mr-1" />
+                  {isPast ? 'In Progress' : 'Upcoming'}
+                </span>
+              )}
+            </div>
 
             <div className="space-y-6">
               <div>
@@ -193,13 +208,28 @@ export const EventRegistration: React.FC = () => {
                 </div>
               </div>
 
+              {isPast && (
+                <div className="p-4 border-l-4 border-yellow-400 bg-yellow-50 dark:bg-yellow-900/20 dark:border-yellow-600">
+                  <div className="flex">
+                    <div className="flex-shrink-0">
+                      <AlertTriangle className="h-5 w-5 text-yellow-400 dark:text-yellow-300" />
+                    </div>
+                    <div className="ml-3">
+                      <p className="text-sm text-yellow-700 dark:text-yellow-200">
+                        This event has already taken place, but you can still register to access your photos once they're processed!
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div>
                 <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
                   Face Registration
                 </h2>
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                   Please provide a clear photo of your face for event check-in and photo tagging.
-                  This photo will be used to identify you in event photos.
+                  This photo will be used to identify you in event photos{isPast ? ' once they are uploaded by the photographers' : ''}.
                 </p>
 
                 {error && (

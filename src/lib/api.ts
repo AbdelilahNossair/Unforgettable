@@ -198,52 +198,6 @@ export const getEventByIdOrCode = async (idOrCode: string) => {
   }
 };
 
-// Register for an event with face embedding extraction using Flask backend
-export const registerForEvent = async (eventCode: string, userId: string, faceImageFile: File) => {
-  try {
-    const apiUrl = getFaceApiUrl();
-    if (!apiUrl) {
-      // Fallback to basic registration without face recognition
-      return registerForEventBasic(eventCode, userId, faceImageFile);
-    }
-
-    // Create formData for the face registration call
-    const formData = new FormData();
-    formData.append('event_code', eventCode);
-    formData.append('user_id', userId);
-    formData.append('image', faceImageFile);
-    formData.append('supabase_url', supabase.supabaseUrl);
-    formData.append('supabase_key', supabase.supabaseKey);
-
-    // Call the Flask face registration API
-    const response = await fetch(`${apiUrl}/register-face`, {
-      method: 'POST',
-      body: formData,
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || 'Failed to register for event');
-    }
-
-    const result = await response.json();
-    
-    // Get the event details to return to the caller
-    const { data: event } = await supabase
-      .from('events')
-      .select('*')
-      .eq('qr_code', eventCode)
-      .single();
-      
-    return {
-      ...result,
-      event
-    };
-  } catch (error) {
-    console.error('Error registering for event:', error);
-    throw error;
-  }
-};
 
 // Fallback registration without face recognition
 const registerForEventBasic = async (eventCode: string, userId: string, faceImageFile: File) => {
@@ -834,6 +788,200 @@ export const completePhotoUploads = async (eventId: string, photoIds: string[]):
 
   } catch (error) {
     console.error('Error completing photo uploads:', error);
+    throw error;
+  }
+};
+
+
+// Set your Python API URL
+const FACE_API_URL = process.env.FACE_API_URL || 'http://localhost:5000';
+
+/**
+ * Register a user's face with the Python API
+ */
+export const registerFace = async (eventCode: string, userId: string, imageFile: File): Promise<any> => {
+  try {
+    const supabaseUrl = process.env.VITE_SUPABASE_URL || '';
+    const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || '';
+    
+    const formData = new FormData();
+    formData.append('event_code', eventCode);
+    formData.append('user_id', userId);
+    formData.append('supabase_url', supabaseUrl);
+    formData.append('supabase_key', supabaseKey); 
+    formData.append('image', imageFile);
+
+    // Call the Python API endpoint
+    const response = await fetch(`${FACE_API_URL}/register-face`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to register face');
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Error registering face:', error);
+    throw error;
+  }
+};
+
+/**
+ * Process a single photo with the Python API
+ */
+export const processPhoto = async (photoId: string): Promise<any> => {
+  try {
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+    const supabaseKey = import.meta.env.VITE_SUPABASE_SERVICE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+    
+    const formData = new FormData();
+    formData.append('photo_id', photoId);
+    formData.append('supabase_url', supabaseUrl);
+    formData.append('supabase_key', supabaseKey);
+
+    // Call the Python API endpoint
+    const response = await fetch(`${FACE_API_URL}/process-photo`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to process photo');
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error(`Error processing photo ${photoId}:`, error);
+    throw error;
+  }
+};
+
+/**
+ * Process multiple photos in sequence
+ */
+export const processPhotos = async (photoIds: string[]): Promise<boolean> => {
+  try {
+    let allSuccessful = true;
+    
+    // Process photos in sequence to avoid overwhelming the API
+    for (const photoId of photoIds) {
+      try {
+        await processPhoto(photoId);
+      } catch (error) {
+        console.error(`Error processing photo ${photoId}:`, error);
+        allSuccessful = false;
+      }
+      
+      // Add a small delay between requests
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    
+    return allSuccessful;
+  } catch (error) {
+    console.error('Error processing photos:', error);
+    throw error;
+  }
+};
+
+/**
+ * Process all unprocessed photos for an event
+ */
+export const processEventPhotos = async (eventId: string): Promise<{
+  total: number;
+  processed: number;
+}> => {
+  try {
+    // Get all unprocessed photos for this event
+    const { data: photos, error } = await supabase
+      .from('photos')
+      .select('id')
+      .eq('event_id', eventId)
+      .eq('processed', false);
+      
+    if (error) throw error;
+    
+    if (!photos || photos.length === 0) {
+      return { total: 0, processed: 0 };
+    }
+    
+    const photoIds = photos.map(p => p.id);
+    let processedCount = 0;
+    
+    // Process in smaller batches to avoid overwhelming the system
+    const batchSize = 3;
+    const batches = [];
+    
+    for (let i = 0; i < photoIds.length; i += batchSize) {
+      batches.push(photoIds.slice(i, i + batchSize));
+    }
+    
+    for (const batch of batches) {
+      const success = await processPhotos(batch);
+      if (success) {
+        processedCount += batch.length;
+      }
+      
+      // Add a delay between batches
+      await new Promise(resolve => setTimeout(resolve, 3000));
+    }
+    
+    return {
+      total: photoIds.length,
+      processed: processedCount
+    };
+  } catch (error) {
+    console.error('Error processing event photos:', error);
+    throw error;
+  }
+};
+
+// Register for an event with face embedding extraction using Flask backend
+export const registerForEvent = async (eventCode: string, userId: string, faceImageFile: File) => {
+  try {
+    const apiUrl = getFaceApiUrl();
+    if (!apiUrl) {
+      // Fallback to basic registration without face recognition
+      return registerForEventBasic(eventCode, userId, faceImageFile);
+    }
+
+    // Create formData for the face registration call
+    const formData = new FormData();
+    formData.append('event_code', eventCode);
+    formData.append('user_id', userId);
+    formData.append('image', faceImageFile);
+    formData.append('supabase_url', supabase.supabaseUrl);
+    formData.append('supabase_key', supabase.supabaseKey);
+
+    // Call the Flask face registration API
+    const response = await fetch(`${apiUrl}/register-face`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to register for event');
+    }
+
+    const result = await response.json();
+    
+    // Get the event details to return to the caller
+    const { data: event } = await supabase
+      .from('events')
+      .select('*')
+      .eq('qr_code', eventCode)
+      .single();
+      
+    return {
+      ...result,
+      event
+    };
+  } catch (error) {
+    console.error('Error registering for event:', error);
     throw error;
   }
 };
