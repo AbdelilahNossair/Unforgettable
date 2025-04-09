@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Camera, Search, CalendarDays, Clock, Loader2 } from 'lucide-react';
+import { Camera, Search, CalendarDays, Clock, Loader2, Download, Trash2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../store';
 import { toast } from 'sonner';
@@ -37,6 +37,7 @@ export const AttendeePhotos: React.FC = () => {
   const [photos, setPhotos] = useState<SimplePhoto[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [deletingPhoto, setDeletingPhoto] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -210,6 +211,80 @@ export const AttendeePhotos: React.FC = () => {
     }
   };
 
+  // Handle photo download
+  const handleDownload = async (photoUrl: string, photoName: string) => {
+    try {
+      // Show loading toast
+      toast.loading('Preparing download...');
+      
+      // Fetch the image data
+      const response = await fetch(photoUrl);
+      if (!response.ok) throw new Error('Failed to fetch image');
+      
+      // Convert to blob
+      const blob = await response.blob();
+      
+      // Create object URL
+      const url = window.URL.createObjectURL(blob);
+      
+      // Create download link
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${photoName.replace(/\s+/g, '-').toLowerCase()}-${Date.now()}.jpg`;
+      document.body.appendChild(link);
+      link.click();
+      
+      // Clean up
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(link);
+        toast.dismiss();
+        toast.success('Download complete');
+      }, 100);
+    } catch (error) {
+      console.error('Error downloading photo:', error);
+      toast.dismiss();
+      toast.error('Failed to download photo');
+    }
+  };
+
+  // Handle photo deletion
+  const handleDelete = async (photoId: string) => {
+    if (!user || !user.id || !selectedEvent) return;
+    
+    try {
+      setDeletingPhoto(photoId);
+      
+      // First remove the face record for this user
+      const { error: faceError } = await supabase
+        .from('faces')
+        .delete()
+        .eq('photo_id', photoId)
+        .eq('user_id', user.id);
+        
+      if (faceError) throw faceError;
+      
+      // Update photos list to remove this photo
+      setPhotos(photos.filter(p => p.id !== photoId));
+      toast.success('Photo removed from your collection');
+      
+      // Fetch updated photo count for this event
+      if (selectedEvent) {
+        const updatedEvents = [...events];
+        const eventIndex = updatedEvents.findIndex(e => e.id === selectedEvent);
+        if (eventIndex >= 0) {
+          updatedEvents[eventIndex].photo_count = Math.max(0, updatedEvents[eventIndex].photo_count - 1);
+          setEvents(updatedEvents);
+        }
+      }
+    } catch (error) {
+      console.error('Error removing photo:', error);
+      toast.error('Failed to remove photo');
+    } finally {
+      setDeletingPhoto(null);
+    }
+  };
+
   const filteredPhotos = searchTerm
     ? photos.filter(photo => 
         photo.event_name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -355,17 +430,48 @@ export const AttendeePhotos: React.FC = () => {
                       ))}
                     </div>
                     
-                    {/* Hover overlay */}
+                    {/* Hover overlay with action buttons */}
                     <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-opacity flex items-center justify-center">
-                      <div className="hidden group-hover:block">
+                      <div className="hidden group-hover:flex space-x-2">
+                        {/* View in fullsize */}
                         <a
                           href={photo.url}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="p-2 bg-white text-gray-900 rounded-full hover:bg-gray-100 transition-colors"
+                          title="View full size"
                         >
                           <Search className="h-5 w-5" />
                         </a>
+                        
+                        {/* Download button */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDownload(photo.url, `${photo.event_name}-photo`);
+                          }}
+                          className="p-2 bg-white text-gray-900 rounded-full hover:bg-gray-100 transition-colors"
+                          title="Download photo"
+                        >
+                          <Download className="h-5 w-5" />
+                        </button>
+                        
+                        {/* Delete button */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDelete(photo.id);
+                          }}
+                          disabled={deletingPhoto === photo.id}
+                          className="p-2 bg-white text-red-600 rounded-full hover:bg-gray-100 transition-colors"
+                          title="Remove from your collection"
+                        >
+                          {deletingPhoto === photo.id ? (
+                            <Loader2 className="h-5 w-5 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-5 w-5" />
+                          )}
+                        </button>
                       </div>
                     </div>
                   </div>
