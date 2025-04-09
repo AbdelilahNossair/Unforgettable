@@ -10,7 +10,7 @@ export const LoadingScreen: React.FC = () => {
         <img
           src={isDarkMode ? "/logo_2.png" : "/logo_1.png"}
           alt="Logo"
-          className="h-24 w-auto animate-pulse mb-8"
+          className="h-32 w-auto animate-pulse mb-8"
         />
         <div className="relative">
           <div className="h-24 w-24">

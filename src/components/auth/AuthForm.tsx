@@ -118,7 +118,7 @@ export const AuthForm: React.FC<AuthFormProps> = ({ mode }) => {
           <img 
             src={isDarkMode ? "/logo_2.png" : "/logo_1.png"} 
             alt="Logo" 
-            className="h-24 w-auto" 
+            className="h-32 w-auto" 
           />
         </div>
         <h2 className="mt-6 text-center text-3xl font-light tracking-tight text-gray-900 dark:text-white">

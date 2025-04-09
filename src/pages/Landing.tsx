@@ -83,7 +83,7 @@ export const Landing: React.FC = () => {
               <img 
                 src={isDarkMode ? "/logo_2.png" : "/logo_1.png"} 
                 alt="Moroccan Event Recognition" 
-                className="h-8 w-auto" 
+                className="h-14 w-auto" 
               />
               {/*<span className="ml-2 font-semibold text-emerald-700 dark:text-emerald-500">Events with a New Breath</span>*/}
             </div>
