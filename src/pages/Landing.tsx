@@ -85,7 +85,7 @@ export const Landing: React.FC = () => {
                 alt="Moroccan Event Recognition" 
                 className="h-8 w-auto" 
               />
-              <span className="ml-2 font-semibold text-emerald-700 dark:text-emerald-500">Events with a New Breath</span>
+              {/*<span className="ml-2 font-semibold text-emerald-700 dark:text-emerald-500">Events with a New Breath</span>*/}
             </div>
             
             {/* Mobile menu button */}
