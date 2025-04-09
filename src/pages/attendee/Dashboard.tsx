@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Camera, Calendar, MapPin, Users, Clock, Loader2, QrCode } from 'lucide-react';
+import { Camera, Calendar, MapPin, Users, Clock, Loader2, QrCode, Search, Download, Trash2 } from 'lucide-react';
 import { useAuthStore } from '../../store';
 import { supabase } from '../../lib/supabase';
 import { toast } from 'sonner';
@@ -27,6 +27,7 @@ export const AttendeeDashboard: React.FC = () => {
   });
   const [eventCode, setEventCode] = useState('');
   const [showRegistrationModal, setShowRegistrationModal] = useState(false);
+  const [deletingPhoto, setDeletingPhoto] = useState<string | null>(null);
   const { user } = useAuthStore();
   const navigate = useNavigate();
 
@@ -132,6 +133,75 @@ export const AttendeeDashboard: React.FC = () => {
       toast.error(error instanceof Error ? error.message : 'Failed to fetch dashboard data');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Handle photo download
+  const handleDownload = async (photoUrl: string, photoName: string) => {
+    try {
+      // Show loading toast
+      toast.loading('Preparing download...');
+      
+      // Fetch the image data
+      const response = await fetch(photoUrl);
+      if (!response.ok) throw new Error('Failed to fetch image');
+      
+      // Convert to blob
+      const blob = await response.blob();
+      
+      // Create object URL
+      const url = window.URL.createObjectURL(blob);
+      
+      // Create download link
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `photo-${photoName.replace(/\s+/g, '-').toLowerCase()}-${Date.now()}.jpg`;
+      document.body.appendChild(link);
+      link.click();
+      
+      // Clean up
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(link);
+        toast.dismiss();
+        toast.success('Download complete');
+      }, 100);
+    } catch (error) {
+      console.error('Error downloading photo:', error);
+      toast.dismiss();
+      toast.error('Failed to download photo');
+    }
+  };
+
+  // Handle photo deletion
+  const handleDelete = async (photoId: string) => {
+    if (!user || !user.id) return;
+    
+    try {
+      setDeletingPhoto(photoId);
+      
+      // First remove the face record for this user
+      const { error: faceError } = await supabase
+        .from('faces')
+        .delete()
+        .eq('photo_id', photoId)
+        .eq('user_id', user.id);
+        
+      if (faceError) throw faceError;
+      
+      // Update dashboard data
+      setData(prev => ({
+        ...prev,
+        recentPhotos: prev.recentPhotos.filter(p => p.id !== photoId),
+        totalPhotos: Math.max(0, prev.totalPhotos - 1)
+      }));
+      
+      toast.success('Photo removed from your collection');
+    } catch (error) {
+      console.error('Error removing photo:', error);
+      toast.error('Failed to remove photo');
+    } finally {
+      setDeletingPhoto(null);
     }
   };
 
@@ -323,11 +393,52 @@ export const AttendeeDashboard: React.FC = () => {
                     src={photo.url}
                     alt="Event photo"
                     className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.currentTarget.src = 'https://images.unsplash.com/photo-1591115765373-5207764f72e7?w=600&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8OHx8ZXZlbnR8ZW58MHx8MHx8fDA%3D';
+                    }}
                   />
-                  <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-opacity flex items-center justify-center">
-                    <div className="hidden group-hover:block text-white text-center">
-                      <Camera className="h-8 w-8 mx-auto mb-2" />
-                      <p className="text-sm">View Photo</p>
+                  {/* Hover overlay with action buttons */}
+                  <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-opacity flex items-center justify-center">
+                    <div className="hidden group-hover:flex space-x-2">
+                      {/* View in fullsize */}
+                      <a
+                        href={photo.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="p-2 bg-white text-gray-900 rounded-full hover:bg-gray-100 transition-colors"
+                        title="View full size"
+                      >
+                        <Search className="h-5 w-5" />
+                      </a>
+                      
+                      {/* Download button */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDownload(photo.url, `event-photo`);
+                        }}
+                        className="p-2 bg-white text-gray-900 rounded-full hover:bg-gray-100 transition-colors"
+                        title="Download photo"
+                      >
+                        <Download className="h-5 w-5" />
+                      </button>
+                      
+                      {/* Delete button */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(photo.id);
+                        }}
+                        disabled={deletingPhoto === photo.id}
+                        className="p-2 bg-white text-red-600 rounded-full hover:bg-gray-100 transition-colors"
+                        title="Remove from your collection"
+                      >
+                        {deletingPhoto === photo.id ? (
+                          <Loader2 className="h-5 w-5 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-5 w-5" />
+                        )}
+                      </button>
                     </div>
                   </div>
                 </div>

@@ -257,7 +257,7 @@ export const About: React.FC = () => {
                   <span className="inline-block bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-400 py-1 px-3 rounded-full text-sm font-medium mb-3">2022</span>
                   <h3 className="text-xl font-medium mb-3 text-gray-900 dark:text-white">The Idea Takes Shape</h3>
                   <p className="text-gray-600 dark:text-white/70">
-                    After struggling to organize photos from his sister's wedding, our founder Mohammed envisioned an AI solution that could understand Moroccan wedding traditions and automatically organize photos by family groups.
+                    After struggling to organize photos from his friend's wedding, our founder Abdelilah envisioned an AI solution that could understand Moroccan wedding traditions and automatically organize photos by family groups.
                   </p>
                 </div>
                 <div className="relative h-60 rounded-lg overflow-hidden md:ml-12">
@@ -276,7 +276,7 @@ export const About: React.FC = () => {
                   <span className="inline-block bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-400 py-1 px-3 rounded-full text-sm font-medium mb-3">2023</span>
                   <h3 className="text-xl font-medium mb-3 text-gray-900 dark:text-white">From Vision to Reality</h3>
                   <p className="text-gray-600 dark:text-white/70">
-                    Teaming up with AI specialists from Rabat's technology institute, we developed the first prototype and tested it at 15 weddings across Morocco, refining our algorithms to understand the nuances of Moroccan celebrations.
+                    Teaming up with AI specialists and Tech enthusiats, we developed the first prototype and tested it at multiple weddings across Morocco, refining our algorithms to understand the nuances of Moroccan celebrations.
                   </p>
                 </div>
                 <div className="relative h-60 rounded-lg overflow-hidden order-1 md:mr-12">
@@ -295,7 +295,7 @@ export const About: React.FC = () => {
                   <span className="inline-block bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-400 py-1 px-3 rounded-full text-sm font-medium mb-3">2024</span>
                   <h3 className="text-xl font-medium mb-3 text-gray-900 dark:text-white">Expanding Horizons</h3>
                   <p className="text-gray-600 dark:text-white/70">
-                    With growing demand, we expanded our AI to handle concerts and professional events. Our breakthrough came when we secured partnerships with three of Morocco's largest event venues and received investment from Casablanca's tech incubator.
+                    With Ahmed Reda, our co-founder, business and market analysis, we expanded our AI to handle concerts and professional events.
                   </p>
                 </div>
                 <div className="relative h-60 rounded-lg overflow-hidden md:ml-12">
@@ -314,7 +314,7 @@ export const About: React.FC = () => {
                   <span className="inline-block bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-400 py-1 px-3 rounded-full text-sm font-medium mb-3">2025</span>
                   <h3 className="text-xl font-medium mb-3 text-gray-900 dark:text-white">Today & Beyond</h3>
                   <p className="text-gray-600 dark:text-white/70">
-                    Now serving over 500 events monthly across Morocco, our technology has evolved to become the standard for event recognition in North Africa. Our next step is expanding to neighboring countries while maintaining our commitment to cultural authenticity.
+                    Our technology has evolved to become robust and loyal to cultural integrity. Our next step is expanding to larger and foreign companies while maintaining our commitment to cultural authenticity.
                   </p>
                 </div>
                 <div className="relative h-60 rounded-lg overflow-hidden order-1 md:mr-12">
@@ -412,21 +412,21 @@ export const About: React.FC = () => {
             <div className="bg-white dark:bg-gray-800 rounded-lg overflow-hidden shadow-lg transform hover:scale-105 transition-all duration-300">
               <div className="h-64 relative">
                 <img 
-                  src="https://images.unsplash.com/photo-1627161683077-e34782c24d81?auto=format&fit=crop&q=80" 
-                  alt="Mohammed El Fassi" 
+                  src="Abdelilah_2.jpg" 
+                  alt="Abdelilah Nossair" 
                   className="w-full h-full object-cover"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
               </div>
               <div className="p-6">
-                <h3 className="text-xl font-medium mb-1">Mohammed El Fassi</h3>
-                <div className="text-emerald-600 dark:text-emerald-400 mb-4">Founder & CEO</div>
+                <h3 className="text-xl font-medium mb-1">Abdelilah Nossair</h3>
+                <div className="text-emerald-600 dark:text-emerald-400 mb-4">Founder & AI/Full Stack Engineer</div>
                 <p className="text-gray-600 dark:text-white/70 mb-4">
-                  Former wedding photographer with a computer science background who experienced firsthand the challenges of event photography.
+                Computer Scientist specialzed in AI graduating from Al Akhawayn University with research experience in AI for sustainability, healthcare, and inclusion.
                 </p>
                 <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
                   <MapPin className="h-4 w-4 mr-1" />
-                  <span>Casablanca</span>
+                  <span>Marrakech</span>
                 </div>
               </div>
             </div>
@@ -435,17 +435,17 @@ export const About: React.FC = () => {
             <div className="bg-white dark:bg-gray-800 rounded-lg overflow-hidden shadow-lg transform hover:scale-105 transition-all duration-300">
               <div className="h-64 relative">
                 <img 
-                  src="https://images.unsplash.com/photo-1567532939604-b6b5b0db2604?auto=format&fit=crop&q=80" 
-                  alt="Amina Benjelloun" 
+                  src="Reda.JPG" 
+                  alt="Ahmed Reda Abid" 
                   className="w-full h-full object-cover"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
               </div>
               <div className="p-6">
-                <h3 className="text-xl font-medium mb-1">Amina Benjelloun</h3>
-                <div className="text-emerald-600 dark:text-emerald-400 mb-4">Chief Technology Officer</div>
+                <h3 className="text-xl font-medium mb-1">Ahmed Reda Abid</h3>
+                <div className="text-emerald-600 dark:text-emerald-400 mb-4">Co-Founder & IAM Specialist</div>
                 <p className="text-gray-600 dark:text-white/70 mb-4">
-                  AI researcher with a PhD from Mohammed V University and 5 years at one of Morocco's leading technology companies.
+                  Computer Scientist specialzed in AI graduating from Al Akhawayn University with diversified portfolio of internships of Morocco's leading companies.
                 </p>
                 <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
                   <MapPin className="h-4 w-4 mr-1" />
@@ -458,21 +458,21 @@ export const About: React.FC = () => {
             <div className="bg-white dark:bg-gray-800 rounded-lg overflow-hidden shadow-lg transform hover:scale-105 transition-all duration-300">
               <div className="h-64 relative">
                 <img 
-                  src="https://images.unsplash.com/photo-1531384441138-2736e62e0919?auto=format&fit=crop&q=80" 
-                  alt="Karim Alaoui" 
+                  src="hamza.jpg" 
+                  alt="Hamza El Housni" 
                   className="w-full h-full object-cover"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
               </div>
               <div className="p-6">
-                <h3 className="text-xl font-medium mb-1">Karim Alaoui</h3>
-                <div className="text-emerald-600 dark:text-emerald-400 mb-4">Head of Cultural Integration</div>
+                <h3 className="text-xl font-medium mb-1">Hamza El Housni</h3>
+                <div className="text-emerald-600 dark:text-emerald-400 mb-4">Co-Founder</div>
                 <p className="text-gray-600 dark:text-white/70 mb-4">
-                  Anthropologist specializing in Moroccan celebrations who ensures our technology respects and enhances cultural traditions.
+                  Graduate Student of Al Akhawayn University pursuing an ABET recognized Masters of Science in Big Data Analytics.
                 </p>
                 <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
                   <MapPin className="h-4 w-4 mr-1" />
-                  <span>Marrakech</span>
+                  <span>Temara</span>
                 </div>
               </div>
             </div>
@@ -545,7 +545,7 @@ export const About: React.FC = () => {
               <div className="absolute bottom-0 left-0 right-0 p-8">
                 <blockquote className="text-white text-xl font-light italic">
                   "Our technology enhances the celebration of cultural moments without compromising individual privacy."
-                  <footer className="mt-2 text-sm not-italic">— Mohammed El Fassi, Founder</footer>
+                  <footer className="mt-2 text-sm not-italic">— Abdelilah Nossair, Founder</footer>
                 </blockquote>
               </div>
             </div>

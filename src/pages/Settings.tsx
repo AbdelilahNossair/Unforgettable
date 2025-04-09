@@ -46,9 +46,16 @@ export const Settings: React.FC = () => {
     if (profile) {
       setForm(prev => ({
         ...prev,
-        full_name: '',  // Clear the form value to show placeholder
-        email: '',      // Clear the form value to show placeholder
+        full_name: profile.full_name || '',  // Set to actual value instead of empty string
+        email: profile.email || '',          // Set to actual value instead of empty string
         avatar_url: profile.avatar_url || '',
+        // Keep other form values
+        notifications_email: prev.notifications_email,
+        notifications_push: prev.notifications_push,
+        profile_visibility: prev.profile_visibility,
+        two_factor_enabled: prev.two_factor_enabled,
+        language: prev.language,
+        timezone: prev.timezone,
       }));
     }
   }, [profile]);
