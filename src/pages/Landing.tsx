@@ -3,12 +3,14 @@ import { Link } from 'react-router-dom';
 import { ArrowRight, Shield, Zap, Globe, Sun, Moon, Menu, X, ChevronRight, QrCode, Camera, Tag, Users } from 'lucide-react';
 import { useAuthStore } from '../store';
 import { QRScanner } from '../components/QRScanner';
+import { DemoRequestModal } from '../components/DemoRequestModal';
 
 export const Landing: React.FC = () => {
   const { isDarkMode, toggleDarkMode } = useAuthStore();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [activeTestimonial, setActiveTestimonial] = useState(0);
   const [showScanner, setShowScanner] = useState(false);
+  const [showDemoModal, setShowDemoModal] = useState(false);
 
   const testimonials = [
     {
@@ -64,6 +66,11 @@ export const Landing: React.FC = () => {
   const handleThemeToggle = () => {
     toggleDarkMode();
     localStorage.setItem('theme-preference', (!isDarkMode).toString());
+  };
+
+  const handleRequestDemo = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setShowDemoModal(true);
   };
 
   return (
@@ -168,6 +175,12 @@ export const Landing: React.FC = () => {
         <QRScanner onClose={() => setShowScanner(false)} />
       )}
 
+      {/* Estimate Request Modal */}
+      <DemoRequestModal 
+        isOpen={showDemoModal} 
+        onClose={() => setShowDemoModal(false)} 
+      />
+
       {/* Hero Section */}
       <div className="relative min-h-screen flex items-center pt-16 sm:pt-20">
         <div className="absolute inset-0">
@@ -193,17 +206,17 @@ export const Landing: React.FC = () => {
                   Event Recognition
                 </span>
               </h1>
-              <p className="mt-6 sm:mt-8 text-lg sm:text-xl font-light leading-relaxed text-gray-600 dark:text-white/70 max-w-2xl">
+              <p className="mt-10 sm:mt-14 text-lg sm:text-xl font-light leading-relaxed text-gray-600 dark:text-white/70 max-w-2xl">
                 Morocco's first AI-powered event recognition platform. Instantly identify guests, enhance security, and capture memorable moments at weddings, concerts, conferences, and all your special occasions.
               </p>
               <div className="mt-8 sm:mt-12 flex flex-col sm:flex-row items-stretch sm:items-center space-y-4 sm:space-y-0 sm:space-x-8">
-                <Link
-                  to="/register"
+                <button
+                  onClick={handleRequestDemo}
                   className="group inline-flex items-center justify-center bg-emerald-700 dark:bg-emerald-500 text-white dark:text-black px-8 py-4 text-sm tracking-wider hover:bg-emerald-800 dark:hover:bg-emerald-400 transition-colors"
                 >
-                  Request Demo
+                  Request Estimate
                   <ArrowRight className="ml-3 h-4 w-4 transition-transform group-hover:translate-x-1" />
-                </Link>
+                </button>
                 <Link
                   to="/about"
                   className="text-sm tracking-wider text-gray-600 dark:text-white/80 hover:text-gray-900 dark:hover:text-white transition-colors text-center sm:text-left py-4 sm:py-0"
@@ -416,13 +429,13 @@ export const Landing: React.FC = () => {
             <p className="text-white/80 text-lg sm:text-xl mb-8 sm:mb-12 leading-relaxed">
               Join Morocco's leading venues, event planners, and businesses using our AI recognition technology.
             </p>
-            <Link
-              to="/register"
+            <button
+              onClick={handleRequestDemo}
               className="inline-flex items-center bg-white text-emerald-800 px-8 sm:px-12 py-4 text-sm tracking-wider hover:bg-gray-100 transition-colors group"
             >
               Schedule Consultation
               <ChevronRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
-            </Link>
+            </button>
           </div>
         </div>
       </div>

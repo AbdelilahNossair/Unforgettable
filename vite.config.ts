@@ -17,5 +17,15 @@ export default defineConfig({
       SUPABASE_SERVICE_KEY: JSON.stringify(process.env.VITE_SUPABASE_SERVICE_KEY),
       // Add any other environment variables you're using in your app
     }
+  },
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+        secure: false
+      }
+    }
   }
+
 });

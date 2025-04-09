@@ -14,6 +14,7 @@ import { AttendeePhotos } from './pages/attendee/AttendeePhotos';
 import { useAuthStore } from './store';
 import { getCurrentUser } from './lib/auth';
 import { useSupabaseSubscriptions } from './hooks/useSupabase';
+import { About } from './pages/About';
 
 // Protected route wrapper component
 const ProtectedEventRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -62,6 +63,7 @@ function App() {
         <Routes>
           {/* Public routes */}
           <Route path="/" element={user ? <Navigate to="/dashboard" /> : <Landing />} />
+          <Route path="/about" element={<About />} /> 
           <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <AuthForm mode="login" />} />
           <Route path="/register" element={user ? <Navigate to="/dashboard" /> : <AuthForm mode="register" />} />
           

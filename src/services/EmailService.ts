@@ -1,4 +1,4 @@
-// src/services/EmailService.ts - Browser-compatible version
+// src/services/EmailService.ts - Updated to include demo request handling
 
 // Email data interface
 export interface EmailData {
@@ -8,10 +8,22 @@ export interface EmailData {
     textContent?: string;
   }
   
+  // Demo request interface
+  export interface DemoRequestData {
+    eventName: string;
+    eventDescription: string;
+    attendeeCount: string;
+    requesterName: string;
+    requesterEmail: string;
+    requesterPhone: string;
+  }
+  
   // Get configuration from environment variables
   const emailConfig = {
     supabaseUrl: import.meta.env.VITE_SUPABASE_URL || '',
     fromName: import.meta.env.VITE_EMAIL_FROM_NAME || 'EventFace',
+    gmailEmail: import.meta.env.VITE_GMAIL_EMAIL || '',
+    gmailAppPassword: import.meta.env.VITE_GMAIL_APP_PASSWORD || '',
   };
   
   /**
@@ -67,6 +79,65 @@ export interface EmailData {
       console.error('Error sending email:', error);
       return false;
     }
+  }
+  
+  /**
+   * Send demo request email to the admin team
+   */
+  export async function sendDemoRequestEmail(demoData: DemoRequestData): Promise<boolean> {
+    const subject = `New Estimate Request: ${demoData.eventName}`;
+    
+    const htmlContent = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background-color: #10B981; color: white; padding: 20px; text-align: center;">
+          <h1 style="margin: 0;">New Estimate Request</h1>
+        </div>
+        <div style="padding: 20px; border: 1px solid #eaeaea; border-top: none;">
+          <h2>Event Details:</h2>
+          <ul style="list-style: none; padding: 0;">
+            <li style="margin-bottom: 10px;"><strong>Event Name:</strong> ${demoData.eventName}</li>
+            <li style="margin-bottom: 10px;"><strong>Description:</strong> ${demoData.eventDescription}</li>
+            <li style="margin-bottom: 10px;"><strong>Expected Attendees:</strong> ${demoData.attendeeCount}</li>
+          </ul>
+          
+          <h2>Requester Information:</h2>
+          <ul style="list-style: none; padding: 0;">
+            <li style="margin-bottom: 10px;"><strong>Name:</strong> ${demoData.requesterName}</li>
+            <li style="margin-bottom: 10px;"><strong>Email:</strong> ${demoData.requesterEmail}</li>
+            <li style="margin-bottom: 10px;"><strong>Phone:</strong> ${demoData.requesterPhone}</li>
+          </ul>
+          
+          <p style="margin-top: 20px;">Please contact the requester as soon as possible to schedule a demo.</p>
+        </div>
+        <div style="text-align: center; padding: 10px; font-size: 12px; color: #666;">
+          &copy; ${new Date().getFullYear()} ${emailConfig.fromName}. All rights reserved.
+        </div>
+      </div>
+    `;
+    
+    const textContent = `
+      NEW DEMO REQUEST
+      
+      Event Details:
+      - Event Name: ${demoData.eventName}
+      - Description: ${demoData.eventDescription}
+      - Expected Attendees: ${demoData.attendeeCount}
+      
+      Requester Information:
+      - Name: ${demoData.requesterName}
+      - Email: ${demoData.requesterEmail}
+      - Phone: ${demoData.requesterPhone}
+      
+      Please contact the requester as soon as possible to schedule a demo.
+    `;
+    
+    // Send email to the admin (using the configured Gmail address)
+    return await sendEmail(
+      emailConfig.gmailEmail, // Send to ourselves
+      subject,
+      htmlContent,
+      textContent
+    );
   }
   
   /**
