@@ -115,13 +115,14 @@ export const Landing: React.FC = () => {
 
             {/* Desktop navigation */}
             <div className="hidden sm:flex items-center space-x-8">
+              {/*
               <button
                 onClick={() => setShowScanner(true)}
                 className="flex items-center px-4 py-2 bg-emerald-600 dark:bg-emerald-500 text-white dark:text-black rounded hover:bg-emerald-700 dark:hover:bg-emerald-400 transition-colors"
               >
                 <QrCode className="h-5 w-5 mr-2" />
                 Scan Event QR
-              </button>
+              </button>  */ }
               <button
                 onClick={handleThemeToggle}
                 className="p-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
