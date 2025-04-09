@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Camera, Upload, CheckCircle, Loader2 } from 'lucide-react';
+import { Camera, Upload, CheckCircle, Loader2, AlertTriangle } from 'lucide-react';
 import { ImageUpload } from '../components/ImageUpload';
 import { useAuthStore } from '../store';
 import { toast } from 'sonner';
@@ -14,6 +14,8 @@ export const EventRegistration: React.FC = () => {
   const [uploading, setUploading] = useState(false);
   const [event, setEvent] = useState<any>(null);
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [processingStatus, setProcessingStatus] = useState<string>('');
 
   useEffect(() => {
     if (!eventId) {
@@ -46,11 +48,28 @@ export const EventRegistration: React.FC = () => {
       setEvent(event);
     } catch (error: any) {
       console.error('Error fetching event:', error);
-      toast.error('Failed to fetch event details');
+      toast.error(error.message || 'Failed to fetch event details');
       navigate('/');
     } finally {
       setLoading(false);
     }
+  };
+
+  const validateImage = (file: File): boolean => {
+    // Check file size (max 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      setError('Image is too large. Please upload an image smaller than 10MB.');
+      return false;
+    }
+
+    // Check file type
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png'];
+    if (!validTypes.includes(file.type)) {
+      setError('Please upload a valid image (JPEG or PNG).');
+      return false;
+    }
+
+    return true;
   };
 
   const handleImageUpload = async () => {
@@ -59,14 +78,43 @@ export const EventRegistration: React.FC = () => {
       return;
     }
 
+    // Validate image
+    if (!validateImage(selectedImage)) {
+      return;
+    }
+
+    setError(null);
+    setUploading(true);
+    setProcessingStatus('Uploading image...');
+
     try {
-      setUploading(true);
-      await registerForEvent(event.qr_code, user.id, selectedImage);
+      // Add a small delay for UI feedback
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      setProcessingStatus('Processing face...');
+      const result = await registerForEvent(event.qr_code, user.id, selectedImage);
+      
+      setProcessingStatus('Registration complete!');
       toast.success('Successfully registered for event');
-      navigate('/dashboard');
+      
+      // Short delay before redirecting to dashboard
+      setTimeout(() => {
+        navigate('/dashboard');
+      }, 1000);
     } catch (error: any) {
       console.error('Error registering for event:', error);
-      toast.error(error.message || 'Failed to register for event');
+      const errorMessage = error.message || 'Failed to register for event';
+      
+      // Check for specific error messages
+      if (errorMessage.includes('No face detected')) {
+        setError('No face detected in the image. Please upload a clear photo of your face.');
+      } else if (errorMessage.includes('Multiple faces detected')) {
+        setError('Multiple faces detected. Please upload a photo with only your face.');
+      } else {
+        setError(errorMessage);
+      }
+      
+      toast.error(errorMessage);
     } finally {
       setUploading(false);
     }
@@ -147,21 +195,34 @@ export const EventRegistration: React.FC = () => {
 
               <div>
                 <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                  Photo Upload
+                  Face Registration
                 </h2>
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                  Please provide a clear photo of your face for event check-in.
-                  This photo will be used to identify you at the event.
+                  Please provide a clear photo of your face for event check-in and photo tagging.
+                  This photo will be used to identify you in event photos.
                 </p>
+
+                {error && (
+                  <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md flex items-start">
+                    <AlertTriangle className="h-5 w-5 text-red-500 dark:text-red-400 mr-2 mt-0.5 flex-shrink-0" />
+                    <div className="text-sm text-red-600 dark:text-red-300">{error}</div>
+                  </div>
+                )}
 
                 <div className="space-y-4">
                   <ImageUpload
-                    onImageSelect={(file) => setSelectedImage(file)}
-                    onImageClear={() => setSelectedImage(null)}
+                    onImageSelect={(file) => {
+                      setSelectedImage(file);
+                      setError(null);
+                    }}
+                    onImageClear={() => {
+                      setSelectedImage(null);
+                      setError(null);
+                    }}
                     className="max-w-sm mx-auto"
                   />
 
-                  <div className="flex justify-center">
+                  <div className="flex flex-col items-center">
                     <button
                       onClick={handleImageUpload}
                       disabled={!selectedImage || uploading}
@@ -170,7 +231,7 @@ export const EventRegistration: React.FC = () => {
                       {uploading ? (
                         <>
                           <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                          Processing...
+                          {processingStatus || 'Processing...'}
                         </>
                       ) : (
                         <>
@@ -179,6 +240,18 @@ export const EventRegistration: React.FC = () => {
                         </>
                       )}
                     </button>
+                    
+                    {/* Tips for best results */}
+                    <div className="mt-6 text-sm text-gray-600 dark:text-gray-400">
+                      <h3 className="font-medium mb-2">Tips for best results:</h3>
+                      <ul className="list-disc pl-5 space-y-1">
+                        <li>Use good lighting, facing your face</li>
+                        <li>Remove sunglasses, hats, or masks</li>
+                        <li>Look directly at the camera</li>
+                        <li>Only one person should be in the photo</li>
+                        <li>Use a JPEG or PNG format image</li>
+                      </ul>
+                    </div>
                   </div>
                 </div>
               </div>

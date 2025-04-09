@@ -1,6 +1,7 @@
+// src/lib/api.ts (Flask Backend Version)
+
 import { supabase } from './supabase';
 import { Database } from './supabase-types';
-import { toast } from 'sonner';
 import { v4 as uuidv4 } from 'uuid';
 
 type Tables = Database['public']['Tables'];
@@ -13,6 +14,16 @@ type EventPhotographer = Tables['event_photographers']['Row'];
 const isValidUUID = (str: string) => {
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   return uuidRegex.test(str);
+};
+
+// Helper function to get face API URL
+const getFaceApiUrl = () => {
+  const apiUrl = import.meta.env.VITE_FACE_API_URL;
+  if (!apiUrl) {
+    console.warn('VITE_FACE_API_URL is not set in environment variables');
+    return null;
+  }
+  return apiUrl;
 };
 
 // Generate a unique event code
@@ -187,8 +198,55 @@ export const getEventByIdOrCode = async (idOrCode: string) => {
   }
 };
 
-// Register for an event
+// Register for an event with face embedding extraction using Flask backend
 export const registerForEvent = async (eventCode: string, userId: string, faceImageFile: File) => {
+  try {
+    const apiUrl = getFaceApiUrl();
+    if (!apiUrl) {
+      // Fallback to basic registration without face recognition
+      return registerForEventBasic(eventCode, userId, faceImageFile);
+    }
+
+    // Create formData for the face registration call
+    const formData = new FormData();
+    formData.append('event_code', eventCode);
+    formData.append('user_id', userId);
+    formData.append('image', faceImageFile);
+    formData.append('supabase_url', supabase.supabaseUrl);
+    formData.append('supabase_key', supabase.supabaseKey);
+
+    // Call the Flask face registration API
+    const response = await fetch(`${apiUrl}/register-face`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to register for event');
+    }
+
+    const result = await response.json();
+    
+    // Get the event details to return to the caller
+    const { data: event } = await supabase
+      .from('events')
+      .select('*')
+      .eq('qr_code', eventCode)
+      .single();
+      
+    return {
+      ...result,
+      event
+    };
+  } catch (error) {
+    console.error('Error registering for event:', error);
+    throw error;
+  }
+};
+
+// Fallback registration without face recognition
+const registerForEventBasic = async (eventCode: string, userId: string, faceImageFile: File) => {
   try {
     // Get the event
     const { data: event, error: eventError } = await supabase
@@ -227,7 +285,7 @@ export const registerForEvent = async (eventCode: string, userId: string, faceIm
       .from('face-images')
       .getPublicUrl(filePath);
 
-    // Update user with face image URL
+    // Update user with face image URL (but without embedding)
     const { error: userError } = await supabase
       .from('users')
       .update({
@@ -249,11 +307,115 @@ export const registerForEvent = async (eventCode: string, userId: string, faceIm
 
     if (registrationError) throw registrationError;
 
-    return event;
+    return { success: true, message: "Registered without face recognition", event };
   } catch (error) {
-    console.error('Error registering for event:', error);
+    console.error('Error in basic registration:', error);
     throw error;
   }
+};
+
+// Upload event photo with face processing via Flask backend
+export const uploadEventPhoto = async (eventId: string, file: File, userId: string) => {
+  try {
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${eventId}-${Date.now()}.${fileExt}`;
+    const filePath = `${fileName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('event-photos')
+      .upload(filePath, file);
+
+    if (uploadError) throw uploadError;
+
+    // Get the public URL
+    const { data: { publicUrl } } = supabase.storage
+      .from('event-photos')
+      .getPublicUrl(filePath);
+
+    // Create photo entry in database
+    const { data: photoData, error: photoError } = await supabase
+      .from('photos')
+      .insert({
+        event_id: eventId,
+        url: publicUrl,
+        uploaded_by: userId,
+        processed: false
+      })
+      .select()
+      .single();
+
+    if (photoError) throw photoError;
+
+    // Trigger photo processing via Flask backend
+    const apiUrl = getFaceApiUrl();
+    if (apiUrl) {
+      try {
+        // Create formData for the photo processing call
+        const formData = new FormData();
+        formData.append('photo_id', photoData.id);
+        formData.append('supabase_url', supabase.supabaseUrl);
+        formData.append('supabase_key', supabase.supabaseKey);
+        
+        // Call the Flask photo processing API (non-blocking)
+        fetch(`${apiUrl}/process-photo`, {
+          method: 'POST',
+          body: formData,
+        }).catch(err => {
+          console.warn('Failed to trigger photo processing:', err);
+        });
+      } catch (error) {
+        console.error('Failed to trigger photo processing:', error);
+        // Don't throw, as we still uploaded the photo successfully
+      }
+    } else {
+      console.warn('Face API URL not configured. Photo processing will not be triggered.');
+    }
+
+    return photoData;
+  } catch (error) {
+    console.error('Error uploading photo:', error);
+    throw error;
+  }
+};
+
+// Get event photos
+export const getEventPhotos = async (eventId: string) => {
+  const { data, error } = await supabase
+    .from('photos')
+    .select('*')
+    .eq('event_id', eventId)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching event photos:', error);
+    throw error;
+  }
+  
+  return data || [];
+};
+
+// Get faces for a photo
+export const getPhotoFaces = async (photoId: string) => {
+  const { data, error } = await supabase
+    .from('faces')
+    .select(`
+      *,
+      users (
+        id,
+        full_name,
+        email,
+        avatar_url
+      )
+    `)
+    .eq('photo_id', photoId)
+    .order('confidence', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching photo faces:', error);
+    throw error;
+  }
+  
+  return data || [];
 };
 
 // Dashboard Analytics
@@ -345,6 +507,31 @@ export const getDashboardStats = async () => {
         return { data: Array.from(stats, ([email, stats]) => ({ email, ...stats })) };
       });
 
+    // Get face recognition stats
+    const { data: faceStats } = await supabase
+      .from('faces')
+      .select('confidence, user_id')
+      .then(({ data }) => {
+        if (!data || data.length === 0) {
+          return { data: { total: 0, avgConfidence: 0, recognizedCount: 0, recognitionRate: 0 } };
+        }
+        
+        const total = data.length;
+        const recognizedCount = data.filter(face => face.user_id !== null).length;
+        const avgConfidence = data
+          .filter(face => face.user_id !== null)
+          .reduce((sum, face) => sum + face.confidence, 0) / (recognizedCount || 1);
+        
+        return { 
+          data: { 
+            total, 
+            avgConfidence: parseFloat(avgConfidence.toFixed(2)),
+            recognizedCount,
+            recognitionRate: parseFloat((recognizedCount / total * 100).toFixed(1))
+          } 
+        };
+      });
+
     return {
       totalUsers,
       totalEvents,
@@ -354,7 +541,8 @@ export const getDashboardStats = async () => {
       userStats,
       eventsByStatus,
       monthlyEvents,
-      photographerStats
+      photographerStats,
+      faceStats
     };
   } catch (error) {
     console.error('Error fetching dashboard stats:', error);
@@ -536,4 +724,116 @@ export const updateProfile = async (
   }
 
   return data;
+};
+
+
+// Upload multiple photos for an event
+export const uploadEventPhotos = async (eventId: string, files: File[]): Promise<string[]> => {
+  try {
+    const photoIds: string[] = [];
+    
+    for (const file of files) {
+      // Generate a unique filename
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${uuidv4()}.${fileExt}`;
+      const filePath = `${fileName}`;
+
+      // Upload to Supabase Storage
+      const { error: uploadError } = await supabase.storage
+        .from('event-photos')
+        .upload(filePath, file);
+
+      if (uploadError) {
+        console.error('Error uploading file:', uploadError);
+        continue;
+      }
+
+      // Get the public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('event-photos')
+        .getPublicUrl(filePath);
+
+      // Get current user ID
+      const { data: { user } } = await supabase.auth.getUser();
+      const userId = user?.id;
+
+      if (!userId) {
+        throw new Error('User not authenticated');
+      }
+
+      // Create photo record in database
+      const { data: photo, error: dbError } = await supabase
+        .from('photos')
+        .insert({
+          event_id: eventId,
+          url: publicUrl,
+          uploaded_by: userId,
+          processed: false
+        })
+        .select('id')
+        .single();
+
+      if (dbError) {
+        console.error('Error creating photo record:', dbError);
+        continue;
+      }
+
+      photoIds.push(photo.id);
+    }
+
+    return photoIds;
+  } catch (error) {
+    console.error('Error uploading photos:', error);
+    throw error;
+  }
+};
+
+// Mark photo uploads as complete and start processing
+export const completePhotoUploads = async (eventId: string, photoIds: string[]): Promise<void> => {
+  try {
+    if (photoIds.length === 0) {
+      throw new Error('No photos to process');
+    }
+    
+    // Verify that all photos exist and belong to this event
+    const { data: photos, error: verifyError } = await supabase
+      .from('photos')
+      .select('id')
+      .eq('event_id', eventId)
+      .in('id', photoIds);
+
+    if (verifyError) {
+      console.error('Error verifying photos:', verifyError);
+      throw verifyError;
+    }
+
+    if (!photos || photos.length !== photoIds.length) {
+      throw new Error('Some photos could not be verified');
+    }
+
+    // Call Supabase Edge Function to process photos
+    for (const photoId of photoIds) {
+      const { error } = await supabase.functions.invoke('process-photo', {
+        body: { photoId }
+      });
+
+      if (error) {
+        console.error(`Error processing photo ${photoId}:`, error);
+        // Continue with other photos even if one fails
+      }
+    }
+
+    // Update the event status to indicate photos are being processed
+    await supabase
+      .from('events')
+      .update({ 
+        status: 'processing_photos',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', eventId);
+
+  } catch (error) {
+    console.error('Error completing photo uploads:', error);
+    throw error;
+  }
 };

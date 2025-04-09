@@ -10,7 +10,7 @@ import { Users } from './pages/Users';
 import { Settings } from './pages/Settings';
 import { Landing } from './pages/Landing';
 import { EventRegistration } from './pages/EventRegistration';
-import { AttendeePhotos } from './pages/attendee/Photos';
+import { AttendeePhotos } from './pages/attendee/AttendeePhotos';
 import { useAuthStore } from './store';
 import { getCurrentUser } from './lib/auth';
 import { useSupabaseSubscriptions } from './hooks/useSupabase';

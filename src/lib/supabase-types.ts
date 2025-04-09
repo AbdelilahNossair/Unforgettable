@@ -18,6 +18,7 @@ export type Database = {
           full_name: string | null
           avatar_url: string | null
           face_embedding: number[] | null
+          face_image_url: string | null
           created_at: string
           updated_at: string
         }
@@ -29,6 +30,7 @@ export type Database = {
           full_name?: string | null
           avatar_url?: string | null
           face_embedding?: number[] | null
+          face_image_url?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -40,6 +42,7 @@ export type Database = {
           full_name?: string | null
           avatar_url?: string | null
           face_embedding?: number[] | null
+          face_image_url?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -133,7 +136,7 @@ export type Database = {
         Row: {
           id: string
           photo_id: string
-          user_id: string
+          user_id: string | null
           embedding: number[]
           confidence: number
           bbox: Json | null
@@ -142,7 +145,7 @@ export type Database = {
         Insert: {
           id?: string
           photo_id: string
-          user_id: string
+          user_id?: string | null
           embedding: number[]
           confidence: number
           bbox?: Json | null
@@ -151,7 +154,7 @@ export type Database = {
         Update: {
           id?: string
           photo_id?: string
-          user_id?: string
+          user_id?: string | null
           embedding?: number[]
           confidence?: number
           bbox?: Json | null
@@ -186,6 +189,8 @@ export type Database = {
           registration_date: string
           attendance_confirmed: boolean
           attendance_confirmed_at: string | null
+          registration_complete: boolean
+          face_registration_date: string | null
         }
         Insert: {
           id?: string
@@ -194,6 +199,8 @@ export type Database = {
           registration_date?: string
           attendance_confirmed?: boolean
           attendance_confirmed_at?: string | null
+          registration_complete?: boolean
+          face_registration_date?: string | null
         }
         Update: {
           id?: string
@@ -202,6 +209,8 @@ export type Database = {
           registration_date?: string
           attendance_confirmed?: boolean
           attendance_confirmed_at?: string | null
+          registration_complete?: boolean
+          face_registration_date?: string | null
         }
       }
     }
